@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui>
+
+  <panel id="Root" stretch="true" background="#101321FF">
+
+    <panel id="HeaderBar" anchor="top-center" widthPercent="1" height="108" background="#1A1A30FF">
+      <text id="CreationTitle"
+            anchor="middle-center"
+            value="Create Timer"
+            fontSize="42"
+            color="#E2B96FFF"/>
+    </panel>
+
+    <scrollview id="CreationScroll"
+                stretch="true"
+                top="116"
+                bottom="96"
+                left="12"
+                right="12"
+                spacing="12">
+
+      <panel id="PresetSection"
+             height="190"
+             preferredHeight="190"
+             background="#1D2238FF">
+        <text id="PresetSectionTitle"
+              anchor="top-left"
+              x="16"
+              y="-22"
+              width="340"
+              height="42"
+              value="Preset Data"
+              fontSize="30"
+              align="middle-left"
+              color="#F4F6FFFF"/>
+
+        <text id="NameLabel"
+              anchor="top-left"
+              x="16"
+              y="-72"
+              width="240"
+              height="36"
+              value="Timer Name"
+              fontSize="22"
+              align="middle-left"
+              color="#C7D1F7FF"/>
+
+        <inputfield id="PresetNameInput"
+                    anchor="top-left"
+                    x="16"
+                    y="-122"
+                    width="540"
+                    height="54"
+                    placeholder="Morning Focus"
+                    background="#262C45FF"
+                    color="#FFFFFFFF"
+                    fontSize="24"/>
+      </panel>
+
+      <panel id="LoopSection"
+             height="560"
+             preferredHeight="560"
+             background="#1D2238FF">
+
+        <text id="LoopSectionTitle"
+              anchor="top-left"
+              x="16"
+              y="-22"
+              width="340"
+              height="42"
+              value="Loops"
+              fontSize="30"
+              align="middle-left"
+              color="#F4F6FFFF"/>
+
+        <row id="LoopHeaderRow"
+             anchor="top-left"
+             x="14"
+             y="-76"
+             width="560"
+             height="52"
+             spacing="8"
+             background="transparent">
+          <text id="LoopNameLabel" preferredWidth="220" preferredHeight="44" value="Loop 1" fontSize="24" align="middle-left" color="#DEE5FFFF"/>
+          <text id="RepeatLabel" preferredWidth="120" preferredHeight="44" value="Repeat" fontSize="22" color="#8D98C4FF"/>
+          <button id="LoopRepeatMinus" preferredWidth="52" preferredHeight="44" text="-" buttonColor="#38405EFF" textColor="#FFFFFFFF"/>
+          <inputfield id="LoopRepeatInput" preferredWidth="80" preferredHeight="44" value="1" placeholder="1" background="#262C45FF" color="#FFFFFFFF" fontSize="22"/>
+          <button id="LoopRepeatPlus" preferredWidth="52" preferredHeight="44" text="+" buttonColor="#38405EFF" textColor="#FFFFFFFF"/>
+        </row>
+
+        <separator id="LoopSeparator" anchor="top-left" x="16" y="-120" width="540" thickness="2" color="#FFFFFF22"/>
+
+        <text id="EntriesTitle"
+              anchor="top-left"
+              x="16"
+              y="-156"
+              width="340"
+              height="36"
+              value="Entries"
+              fontSize="24"
+              align="middle-left"
+              color="#C7D1F7FF"/>
+
+        <row id="EntryRowHeader"
+             anchor="top-left"
+             x="14"
+             y="-202"
+             width="560"
+             height="36"
+             spacing="8"
+             background="transparent">
+          <text id="EntryNameHead" preferredWidth="220" value="Name" fontSize="20" align="middle-left" color="#8D98C4FF"/>
+          <text id="EntryDurationHead" preferredWidth="120" value="MM:SS" fontSize="20" color="#8D98C4FF"/>
+          <text id="EntryColorHead" preferredWidth="90" value="Color" fontSize="20" color="#8D98C4FF"/>
+          <text id="EntryActionsHead" preferredWidth="120" value="Actions" fontSize="20" color="#8D98C4FF"/>
+        </row>
+
+        <row id="EntryRow1"
+             anchor="top-left"
+             x="14"
+             y="-252"
+             width="560"
+             height="62"
+             spacing="8"
+             background="#252C48FF">
+          <inputfield id="Entry1Name" preferredWidth="220" preferredHeight="50" value="Warmup" placeholder="Entry name" background="#262C45FF" color="#FFFFFFFF" fontSize="22"/>
+          <inputfield id="Entry1Duration" preferredWidth="120" preferredHeight="50" value="05:00" placeholder="00:30" background="#262C45FF" color="#FFFFFFFF" fontSize="22"/>
+          <button id="Entry1Color" preferredWidth="90" preferredHeight="50" text="Blue" buttonColor="#3B6FF5FF" textColor="#FFFFFFFF"/>
+          <button id="Entry1Dup" preferredWidth="56" preferredHeight="50" text="" icon="TimeLoop/Icons/ic_duplicate" iconSize="24" iconAlign="left" buttonColor="#38405EFF" textColor="#FFFFFFFF"/>
+          <button id="Entry1Delete" preferredWidth="56" preferredHeight="50" text="" icon="TimeLoop/Icons/ic_delete" iconSize="24" iconAlign="left" buttonColor="#7A2A32FF" textColor="#FFFFFFFF"/>
+        </row>
+
+        <button id="AddEntryBtn"
+                anchor="top-left"
+                x="16"
+                y="-336"
+                width="220"
+                height="52"
+            text="Add Entry"
+          icon="TimeLoop/Icons/ic_add"
+          iconSize="24"
+          iconAlign="left"
+                buttonColor="#38405EFF"
+                textColor="#FFFFFFFF"/>
+
+        <button id="AddLoopBtn"
+                anchor="top-left"
+                x="248"
+                y="-336"
+                width="220"
+                height="52"
+            text="Add Loop"
+          icon="TimeLoop/Icons/ic_add"
+          iconSize="24"
+          iconAlign="left"
+                buttonColor="#38405EFF"
+                textColor="#FFFFFFFF"/>
+
+        <text id="CreationHint"
+              anchor="bottom-left"
+              x="16"
+              y="20"
+              width="560"
+              height="84"
+              value="UI preview only: fields are visible now based on PLAN.\nEditing logic, save flow, and drag-drop will be added next."
+              fontSize="20"
+              align="middle-left"
+              color="#8D98C4FF"/>
+      </panel>
+
+    </scrollview>
+
+    <panel id="BottomBar" anchor="bottom-center" widthPercent="1" height="92" background="#1A1A30FF">
+      <button id="BackBtn"
+              anchor="middle-left"
+              x="20"
+              width="180"
+              height="64"
+              text="Back"
+              icon="TimeLoop/Icons/ic_back"
+              iconSize="24"
+              iconAlign="left"
+              buttonColor="#5B647FFF"
+              textColor="#FFFFFFFF"
+              event="creation.back"/>
+
+      <button id="SavePresetBtn"
+              anchor="middle-right"
+              x="-20"
+              width="220"
+              height="64"
+              text="Save (Soon)"
+              icon="TimeLoop/Icons/ic_timer"
+              iconSize="24"
+              iconAlign="left"
+              buttonColor="#3E4A74FF"
+              textColor="#C5CCE4FF"/>
+    </panel>
+
+  </panel>
+
+</ui>

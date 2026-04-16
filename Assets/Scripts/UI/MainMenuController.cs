@@ -60,8 +60,6 @@ public class MainMenuController : MonoBehaviour
     void CreateNewPreset()
     {
         TimerPreset newPreset = new TimerPreset { name = "New Timer" };
-        presets.Add(newPreset);
-        SaveLoadManager.SaveTimerPresets(presets);
         UIManager.Instance.LoadTimerCreationScene(newPreset);
     }
 

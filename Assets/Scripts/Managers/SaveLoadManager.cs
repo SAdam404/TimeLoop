@@ -58,6 +58,11 @@ public static class SaveLoadManager
                 preset.name = "New Timer";
             }
 
+            if (string.IsNullOrWhiteSpace(preset.id))
+            {
+                preset.id = System.Guid.NewGuid().ToString("N");
+            }
+
             if (preset.loops == null)
             {
                 preset.loops = new List<Loop>();
