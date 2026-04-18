@@ -170,7 +170,7 @@
              height="110"
              spacing="12"
              background="#252C48FF">
-          <button id="Entry1Color" flex="1" preferredHeight="92" text="Blue" buttonFontSize="42" buttonColor="#3B6FF5FF" textColor="#FFFFFFFF"/>
+          <button id="Entry1Color" flex="1" preferredHeight="92" text="Color" buttonFontSize="42" buttonColor="#3B6FF5FF" textColor="#FFFFFFFF"/>
           <button id="Entry1Dup" flex="1" preferredHeight="92" text="Duplicate" buttonFontSize="42" icon="TimeLoop/Icons/ic_duplicate" iconSize="36" iconAlign="left" buttonColor="#38405EFF" textColor="#FFFFFFFF"/>
           <button id="Entry1Delete" flex="1" preferredHeight="92" text="Delete" buttonFontSize="42" icon="TimeLoop/Icons/ic_delete" iconSize="36" iconAlign="left" buttonColor="#7A2A32FF" textColor="#FFFFFFFF"/>
         </row>
@@ -236,6 +236,22 @@
               iconAlign="left"
               buttonColor="#3E4A74FF"
               textColor="#C5CCE4FF"/>
+    </panel>
+
+    <panel id="ColorPickerPanel" anchor="bottom-center" widthPercent="1" height="140" background="#1A1A30FF" active="false">
+      <row id="ColorPickerRow"
+           anchor="middle-center"
+           widthPercent="0.95"
+           height="110"
+           spacing="8"
+           background="#252C48FF">
+        <button id="ColorPicker_Red" flex="1" preferredHeight="90" buttonColor="#E53935FF" textColor="#000000FF"/>
+        <button id="ColorPicker_Orange" flex="1" preferredHeight="90" buttonColor="#FB8C00FF" textColor="#000000FF"/>
+        <button id="ColorPicker_Yellow" flex="1" preferredHeight="90" buttonColor="#FDD835FF" textColor="#000000FF"/>
+        <button id="ColorPicker_Green" flex="1" preferredHeight="90" buttonColor="#43A047FF" textColor="#000000FF"/>
+        <button id="ColorPicker_Blue" flex="1" preferredHeight="90" buttonColor="#3B6FF5FF" textColor="#FFFFFFFF"/>
+        <button id="ColorPicker_Purple" flex="1" preferredHeight="90" buttonColor="#8E24AAFF" textColor="#FFFFFFFF"/>
+      </row>
     </panel>
 
   </panel>

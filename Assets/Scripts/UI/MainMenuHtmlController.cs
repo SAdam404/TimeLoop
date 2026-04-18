@@ -35,6 +35,19 @@ public class MainMenuHtmlController : MonoBehaviour
     private readonly List<EntryUiRefs> _entryUiRows = new List<EntryUiRefs>();
     private readonly List<GameObject> _dynamicEntryObjects = new List<GameObject>();
 
+    // Color picker colors
+    private static readonly Dictionary<string, Color> ColorMap = new Dictionary<string, Color>
+    {
+        { "Red", new Color(0.898f, 0.220f, 0.208f, 1f) },      // #E53935FF
+        { "Orange", new Color(0.992f, 0.549f, 0f, 1f) },        // #FB8C00FF
+        { "Yellow", new Color(0.992f, 0.851f, 0.208f, 1f) },    // #FDD835FF
+        { "Green", new Color(0.263f, 0.627f, 0.278f, 1f) },     // #43A047FF
+        { "Blue", new Color(0.231f, 0.435f, 0.961f, 1f) },      // #3B6FF5FF
+        { "Purple", new Color(0.557f, 0.141f, 0.667f, 1f) }     // #8E24AAFF
+    };
+
+    private int _selectedEntryForColorPicker = -1;
+
     private sealed class EntryUiRefs
     {
         public GameObject HeaderRow;
@@ -47,7 +60,9 @@ public class MainMenuHtmlController : MonoBehaviour
         public InputField DurationInput;
         public Button DurationMinusButton;
         public Button DurationPlusButton;
+        public Button ColorButton;
         public Button DuplicateButton;
+        public Button DeleteButton;
     }
 
     private void Awake()
@@ -139,6 +154,9 @@ public class MainMenuHtmlController : MonoBehaviour
 
         EnsureWorkingData();
         uiHandler.SetInputText("PresetNameInput", _workingPreset.name);
+
+        // Hide color picker on scene load
+        HideColorPicker();
 
         var backButtonObject = uiHandler.GetElement("BackBtn");
         var backButton = backButtonObject != null ? backButtonObject.GetComponent<Button>() : null;
@@ -233,6 +251,23 @@ public class MainMenuHtmlController : MonoBehaviour
         };
 
         _workingLoop.entries.Insert(index + 1, clone);
+        RebuildEntryRows();
+    }
+
+    private void OnDeleteEntryPressed(int index)
+    {
+        EnsureWorkingData();
+        SyncUiToWorkingData();
+
+        if (index < 0 || index >= _workingLoop.entries.Count)
+            return;
+
+        _workingLoop.entries.RemoveAt(index);
+
+        // Keep one editable entry visible even after deleting the last one.
+        if (_workingLoop.entries.Count == 0)
+            _workingLoop.entries.Add(new Entry());
+
         RebuildEntryRows();
     }
 
@@ -347,17 +382,50 @@ public class MainMenuHtmlController : MonoBehaviour
 
         if (ui.DurationInput != null)
             ui.DurationInput.text = FormatSeconds(Mathf.RoundToInt(Mathf.Max(0f, entry.durationSeconds)));
+
+        // Apply entry color to button
+        if (ui.ColorButton != null)
+        {
+            var buttonImage = ui.ColorButton.GetComponent<Image>();
+            if (buttonImage != null)
+                buttonImage.color = entry.color;
+        }
+
+        // Apply entry color (darkened) to controls row background
+        if (ui.ControlsRow != null)
+        {
+            var rowImage = ui.ControlsRow.GetComponent<Image>();
+            if (rowImage != null)
+            {
+                var darkColor = new Color(entry.color.r * 0.6f, entry.color.g * 0.6f, entry.color.b * 0.6f, 1f);
+                rowImage.color = darkColor;
+            }
+        }
     }
 
     private void WireEntryButtons(int index)
     {
         var ui = _entryUiRows[index];
 
+        if (ui.ColorButton != null)
+        {
+            ui.ColorButton.onClick.RemoveAllListeners();
+            var capturedIndex = index;
+            ui.ColorButton.onClick.AddListener(() => OnColorButtonPressed(capturedIndex));
+        }
+
         if (ui.DuplicateButton != null)
         {
             ui.DuplicateButton.onClick.RemoveAllListeners();
             var capturedIndex = index;
             ui.DuplicateButton.onClick.AddListener(() => OnDuplicateEntryPressed(capturedIndex));
+        }
+
+        if (ui.DeleteButton != null)
+        {
+            ui.DeleteButton.onClick.RemoveAllListeners();
+            var capturedIndex = index;
+            ui.DeleteButton.onClick.AddListener(() => OnDeleteEntryPressed(capturedIndex));
         }
 
         if (ui.DurationMinusButton != null)
@@ -427,7 +495,9 @@ public class MainMenuHtmlController : MonoBehaviour
         refs.DurationInput = refs.DurationRow.GetComponentInChildren<InputField>(true);
         refs.DurationMinusButton = FindButtonByName(refs.DurationRow, "Entry1DurationMinus");
         refs.DurationPlusButton = FindButtonByName(refs.DurationRow, "Entry1DurationPlus");
+        refs.ColorButton = FindButtonByName(refs.ControlsRow, "Entry1Color");
         refs.DuplicateButton = FindButtonByName(refs.ControlsRow, "Entry1Dup");
+        refs.DeleteButton = FindButtonByName(refs.ControlsRow, "Entry1Delete");
         return refs;
     }
 
@@ -459,7 +529,9 @@ public class MainMenuHtmlController : MonoBehaviour
             DurationInput = durationClone.GetComponentInChildren<InputField>(true),
             DurationMinusButton = FindButtonByName(durationClone, "Entry1DurationMinus"),
             DurationPlusButton = FindButtonByName(durationClone, "Entry1DurationPlus"),
-            DuplicateButton = FindButtonByName(controlsClone, "Entry1Dup")
+            ColorButton = FindButtonByName(controlsClone, "Entry1Color"),
+            DuplicateButton = FindButtonByName(controlsClone, "Entry1Dup"),
+            DeleteButton = FindButtonByName(controlsClone, "Entry1Delete")
         };
     }
 
@@ -542,6 +614,93 @@ public class MainMenuHtmlController : MonoBehaviour
         }
 
         _dynamicEntryObjects.Clear();
+    }
+
+    private void OnColorButtonPressed(int index)
+    {
+        if (index < 0 || index >= _entryUiRows.Count)
+            return;
+
+        _selectedEntryForColorPicker = index;
+        ShowColorPicker();
+    }
+
+    private void ShowColorPicker()
+    {
+        var colorPickerPanel = uiHandler.GetElement("ColorPickerPanel");
+        if (colorPickerPanel != null)
+        {
+            colorPickerPanel.SetActive(true);
+        }
+
+        // Wire up the color picker buttons
+        WireColorPickerButtons();
+    }
+
+    private void HideColorPicker()
+    {
+        var colorPickerPanel = uiHandler.GetElement("ColorPickerPanel");
+        if (colorPickerPanel != null)
+        {
+            colorPickerPanel.SetActive(false);
+        }
+    }
+
+    private void WireColorPickerButtons()
+    {
+        var colorNames = new[] { "Red", "Orange", "Yellow", "Green", "Blue", "Purple" };
+        
+        foreach (var colorName in colorNames)
+        {
+            var buttonId = $"ColorPicker_{colorName}";
+            var button = GetButton(buttonId);
+            if (button != null)
+            {
+                button.onClick.RemoveAllListeners();
+                var capturedColor = colorName;
+                button.onClick.AddListener(() => OnColorSelected(capturedColor));
+            }
+        }
+    }
+
+    private void OnColorSelected(string colorName)
+    {
+        if (_selectedEntryForColorPicker < 0 || _selectedEntryForColorPicker >= _entryUiRows.Count)
+            return;
+
+        if (!ColorMap.TryGetValue(colorName, out var selectedColor))
+            selectedColor = Color.white;
+
+        // Update the model
+        if (_selectedEntryForColorPicker < _workingLoop.entries.Count)
+        {
+            var entry = _workingLoop.entries[_selectedEntryForColorPicker];
+            if (entry != null)
+                entry.color = selectedColor;
+        }
+
+        // Update the UI - apply color to the entry background row
+        var entryRefs = _entryUiRows[_selectedEntryForColorPicker];
+        if (entryRefs.ControlsRow != null)
+        {
+            var image = entryRefs.ControlsRow.GetComponent<Image>();
+            if (image != null)
+            {
+                // Apply the color with slight darkening for UI visibility
+                var darkColor = new Color(selectedColor.r * 0.6f, selectedColor.g * 0.6f, selectedColor.b * 0.6f, 1f);
+                image.color = darkColor;
+            }
+        }
+
+        // Update the color button itself
+        if (entryRefs.ColorButton != null)
+        {
+            var buttonImage = entryRefs.ColorButton.GetComponent<Image>();
+            if (buttonImage != null)
+                buttonImage.color = selectedColor;
+        }
+
+        HideColorPicker();
     }
 
     private static int ParseDurationToSeconds(string duration)
