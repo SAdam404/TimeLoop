@@ -156,11 +156,35 @@ namespace TimeLoop.Core.UI
         private RectTransform ResolveTargetRoot()
         {
             if (targetRoot != null)
+            {
+                var targetCanvas = targetRoot.GetComponentInParent<Canvas>();
+                if (targetCanvas != null)
+                {
+                    var existingScaler = targetCanvas.GetComponent<CanvasScaler>();
+                    if (existingScaler != null)
+                    {
+                        existingScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                        existingScaler.referenceResolution = new Vector2(1080f, 1920f);
+                        existingScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+                        existingScaler.matchWidthOrHeight = 1f;
+                    }
+                }
+
                 return targetRoot;
+            }
 
             var canvas = FindAnyObjectByType<Canvas>();
             if (canvas != null)
             {
+                var existingScaler = canvas.GetComponent<CanvasScaler>();
+                if (existingScaler != null)
+                {
+                    existingScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                    existingScaler.referenceResolution = new Vector2(1080f, 1920f);
+                    existingScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+                    existingScaler.matchWidthOrHeight = 1f;
+                }
+
                 targetRoot = canvas.GetComponent<RectTransform>();
                 return targetRoot;
             }
@@ -171,7 +195,9 @@ namespace TimeLoop.Core.UI
 
             var scaler = canvasGo.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.referenceResolution = new Vector2(1080f, 1920f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 1f;
 
             targetRoot = canvasGo.GetComponent<RectTransform>();
             return targetRoot;

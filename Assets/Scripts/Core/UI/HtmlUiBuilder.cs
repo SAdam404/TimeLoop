@@ -182,7 +182,8 @@ namespace TimeLoop.Core.UI
             if (string.IsNullOrWhiteSpace(labelText) && string.IsNullOrWhiteSpace(iconPath))
                 labelText = id;
 
-            var label = CreateCenteredLabel(go.transform, font, labelText);
+            var buttonFontSize = ParseInt(GetAttribute(node, "buttonFontSize", "40"), 40);
+            var label = CreateCenteredLabel(go.transform, font, labelText, buttonFontSize, true);
             label.color = ParseColor(GetAttribute(node, "textColor", "#FFFFFFFF"), Color.white);
 
             if (!string.IsNullOrWhiteSpace(iconPath))
@@ -352,7 +353,7 @@ namespace TimeLoop.Core.UI
             hlg.spacing = ParseFloat(GetAttribute(node, "spacing", "8"), 8f);
             hlg.padding = new RectOffset(8, 8, 4, 4);
             hlg.childControlHeight = true;
-            hlg.childControlWidth = false;
+            hlg.childControlWidth = true;
             hlg.childForceExpandHeight = true;
             hlg.childForceExpandWidth = false;
 
@@ -377,6 +378,8 @@ namespace TimeLoop.Core.UI
             var id = GetAttribute(node, "id", "InputField");
             var placeholder = GetAttribute(node, "placeholder", "Enter text...");
             var defaultValue = GetAttribute(node, "value", string.Empty);
+            var inputType = GetAttribute(node, "inputType", "standard").Trim().ToLowerInvariant();
+            var maxLength = ParseInt(GetAttribute(node, "maxLength", "0"), 0);
 
             var go = new GameObject(id, typeof(RectTransform), typeof(Image), typeof(InputField));
             var rt = go.GetComponent<RectTransform>();
@@ -400,6 +403,7 @@ namespace TimeLoop.Core.UI
             textComp.font = font;
             textComp.fontSize = ParseInt(GetAttribute(node, "fontSize", "26"), 26);
             textComp.color = ParseColor(GetAttribute(node, "color", "#FFFFFFFF"), Color.white);
+            textComp.alignment = TextAnchor.MiddleCenter;
             textComp.supportRichText = false;
 
             // Placeholder child
@@ -415,6 +419,7 @@ namespace TimeLoop.Core.UI
             phText.font = font;
             phText.fontSize = ParseInt(GetAttribute(node, "fontSize", "26"), 26);
             phText.color = new Color(0.5f, 0.5f, 0.5f, 0.6f);
+            phText.alignment = TextAnchor.MiddleCenter;
             phText.fontStyle = FontStyle.Italic;
             phText.text = placeholder;
 
@@ -423,7 +428,76 @@ namespace TimeLoop.Core.UI
             inputField.placeholder = phText;
             inputField.text = defaultValue;
 
+            if (maxLength > 0)
+                inputField.characterLimit = maxLength;
+
+            switch (inputType)
+            {
+                case "integer":
+                    inputField.contentType = InputField.ContentType.IntegerNumber;
+                    break;
+
+                case "decimal":
+                    inputField.contentType = InputField.ContentType.DecimalNumber;
+                    break;
+
+                case "alphanumeric":
+                    inputField.contentType = InputField.ContentType.Alphanumeric;
+                    break;
+
+                case "name":
+                    inputField.contentType = InputField.ContentType.Name;
+                    break;
+
+                case "password":
+                    inputField.contentType = InputField.ContentType.Password;
+                    break;
+
+                case "duration":
+                    inputField.contentType = InputField.ContentType.Standard;
+                    inputField.characterLimit = maxLength > 0 ? maxLength : 5;
+                    inputField.onValueChanged.AddListener(value =>
+                    {
+                        var sanitized = SanitizeDuration(value);
+                        if (!string.Equals(value, sanitized, StringComparison.Ordinal))
+                            inputField.text = sanitized;
+                    });
+                    inputField.text = SanitizeDuration(inputField.text);
+                    break;
+
+                default:
+                    inputField.contentType = InputField.ContentType.Standard;
+                    break;
+            }
+
             handler.RegisterElement(id, go);
+        }
+
+        private static string SanitizeDuration(string raw)
+        {
+            if (string.IsNullOrEmpty(raw))
+                return string.Empty;
+
+            var digits = new List<char>(4);
+            foreach (var c in raw)
+            {
+                if (!char.IsDigit(c))
+                    continue;
+
+                digits.Add(c);
+                if (digits.Count >= 4)
+                    break;
+            }
+
+            if (digits.Count == 0)
+                return string.Empty;
+
+            if (digits.Count <= 2)
+                return new string(digits.ToArray());
+
+            var minutePart = new string(digits.GetRange(0, 2).ToArray());
+            var secondPart = new string(digits.GetRange(2, digits.Count - 2).ToArray());
+            return $"{minutePart}:{secondPart}";
         }
 
         private static void BuildProgressBar(XmlNode node, RectTransform parent, UIHandler handler)
@@ -741,7 +815,7 @@ namespace TimeLoop.Core.UI
 
         // ── Widget helpers ───────────────────────────────────────────────────
 
-        private static Text CreateCenteredLabel(Transform parent, Font font, string value)
+        private static Text CreateCenteredLabel(Transform parent, Font font, string value, int fontSize = 26, bool bestFit = false)
         {
             var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
             var labelRt = labelGo.GetComponent<RectTransform>();
@@ -754,9 +828,15 @@ namespace TimeLoop.Core.UI
             var text = labelGo.GetComponent<Text>();
             text.font = font;
             text.text = value;
-            text.fontSize = 26;
+            text.fontSize = fontSize;
             text.alignment = TextAnchor.MiddleCenter;
             text.color = Color.white;
+            text.resizeTextForBestFit = bestFit;
+            if (bestFit)
+            {
+                text.resizeTextMinSize = Mathf.Max(16, fontSize / 2);
+                text.resizeTextMaxSize = fontSize;
+            }
             text.raycastTarget = false;
             return text;
         }

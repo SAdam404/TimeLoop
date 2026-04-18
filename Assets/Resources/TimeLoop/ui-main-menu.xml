@@ -5,45 +5,49 @@
   <panel id="Root" stretch="true" background="#0F0F1EFF">
 
     <!-- ── Header Bar ──────────────────────────────────── -->
-    <panel id="HeaderBar" anchor="top-center" widthPercent="1" height="108" y="0"
+            <panel id="HeaderBar" anchor="top-center" widthPercent="1" height="180" y="0"
            background="#1A1A30FF">
       <text id="AppTitle"
             anchor="middle-center"
             value="TimeLoop"
-            fontSize="46"
+            widthPercent="0.95"
+            height="150"
+            align="middle-center"
+              fontSize="120"
             color="#E2B96FFF"/>
     </panel>
 
     <!-- ── Preset Scroll List (fills space between header and bottom bar) ── -->
     <scrollview id="PresetList"
                 stretch="true"
-                top="114"
-                bottom="100"
+                top="188"
+                bottom="164"
                 left="12"
                 right="12"
-                spacing="10"/>
+                spacing="18"/>
 
     <!-- ── Empty State (shown when no presets exist) ─────── -->
     <text id="EmptyHint"
           anchor="middle-center"
-          widthPercent="0.75"
-          height="120"
+          widthPercent="0.88"
+          height="300"
           value="No timers yet.&#xA;Tap + New Timer to create one."
-          fontSize="26"
+          fontSize="80"
           color="#6868A0FF"/>
 
     <!-- ── Bottom Action Bar ──────────────────────────────── -->
-    <panel id="BottomBar" anchor="bottom-center" widthPercent="1" height="92" y="0"
+    <panel id="BottomBar" anchor="bottom-center" widthPercent="1" height="164" y="0"
            background="#1A1A30FF">
 
       <button id="AddPresetBtn"
               anchor="middle-right"
-              x="-24"
-              width="220"
-              height="64"
+              x="-16"
+              width="560"
+              height="120"
               text="New Timer"
+              buttonFontSize="64"
               icon="TimeLoop/Icons/ic_add"
-              iconSize="26"
+              iconSize="48"
               iconAlign="left"
               buttonColor="#3B6FF5FF"
               textColor="#FFFFFFFF"
