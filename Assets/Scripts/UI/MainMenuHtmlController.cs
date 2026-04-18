@@ -38,12 +38,29 @@ public class MainMenuHtmlController : MonoBehaviour
     // Color picker colors
     private static readonly Dictionary<string, Color> ColorMap = new Dictionary<string, Color>
     {
-        { "Red", new Color(0.898f, 0.220f, 0.208f, 1f) },      // #E53935FF
-        { "Orange", new Color(0.992f, 0.549f, 0f, 1f) },        // #FB8C00FF
-        { "Yellow", new Color(0.992f, 0.851f, 0.208f, 1f) },    // #FDD835FF
-        { "Green", new Color(0.263f, 0.627f, 0.278f, 1f) },     // #43A047FF
-        { "Blue", new Color(0.231f, 0.435f, 0.961f, 1f) },      // #3B6FF5FF
-        { "Purple", new Color(0.557f, 0.141f, 0.667f, 1f) }     // #8E24AAFF
+        // Reds & Pinks
+        { "Red", new Color(0.898f, 0.220f, 0.208f, 1f) },         // #E53935FF
+        { "Crimson", new Color(0.863f, 0.078f, 0.235f, 1f) },     // #DC143CFF
+        { "Rose", new Color(0.914f, 0.118f, 0.388f, 1f) },        // #E91E63FF
+        { "HotPink", new Color(1f, 0.078f, 0.576f, 1f) },         // #FF1493FF
+        { "Magenta", new Color(1f, 0f, 1f, 1f) },                 // #FF00FFFF
+        { "Coral", new Color(1f, 0.498f, 0.314f, 1f) },           // #FF7F50FF
+        
+        // Blues & Purples
+        { "Blue", new Color(0.231f, 0.435f, 0.961f, 1f) },        // #3B6FF5FF
+        { "SkyBlue", new Color(0f, 0.737f, 0.871f, 1f) },         // #00BCDEFF
+        { "Cyan", new Color(0f, 1f, 1f, 1f) },                    // #00FFFFFF
+        { "Purple", new Color(0.557f, 0.141f, 0.667f, 1f) },      // #8E24AAFF
+        { "Indigo", new Color(0.294f, 0f, 0.510f, 1f) },          // #4B0082FF
+        { "Violet", new Color(0.576f, 0f, 0.827f, 1f) },          // #9400D3FF
+        
+        // Greens & Yellows
+        { "Green", new Color(0.263f, 0.627f, 0.278f, 1f) },       // #43A047FF
+        { "Mint", new Color(0f, 1f, 0.533f, 1f) },                // #00E676FF
+        { "Emerald", new Color(0f, 0.784f, 0.325f, 1f) },         // #00C853FF
+        { "Yellow", new Color(0.992f, 0.851f, 0.208f, 1f) },      // #FDD835FF
+        { "Gold", new Color(1f, 0.843f, 0f, 1f) },                // #FFD700FF
+        { "Orange", new Color(0.992f, 0.549f, 0f, 1f) }           // #FB8C00FF
     };
 
     private int _selectedEntryForColorPicker = -1;
@@ -383,24 +400,31 @@ public class MainMenuHtmlController : MonoBehaviour
         if (ui.DurationInput != null)
             ui.DurationInput.text = FormatSeconds(Mathf.RoundToInt(Mathf.Max(0f, entry.durationSeconds)));
 
-        // Apply entry color to button
+        // Apply entry color to all entry rows
+        var darkColor = new Color(entry.color.r * 0.5f, entry.color.g * 0.5f, entry.color.b * 0.5f, 1f);
+        ApplyColorToRow(ui.HeaderRow, darkColor);
+        ApplyColorToRow(ui.NameRow, darkColor);
+        ApplyColorToRow(ui.DurationHeaderRow, darkColor);
+        ApplyColorToRow(ui.DurationRow, darkColor);
+        ApplyColorToRow(ui.ControlsRow, darkColor);
+
+        // Apply entry color to color button
         if (ui.ColorButton != null)
         {
             var buttonImage = ui.ColorButton.GetComponent<Image>();
             if (buttonImage != null)
                 buttonImage.color = entry.color;
         }
+    }
 
-        // Apply entry color (darkened) to controls row background
-        if (ui.ControlsRow != null)
-        {
-            var rowImage = ui.ControlsRow.GetComponent<Image>();
-            if (rowImage != null)
-            {
-                var darkColor = new Color(entry.color.r * 0.6f, entry.color.g * 0.6f, entry.color.b * 0.6f, 1f);
-                rowImage.color = darkColor;
-            }
-        }
+    private void ApplyColorToRow(GameObject row, Color color)
+    {
+        if (row == null)
+            return;
+
+        var image = row.GetComponent<Image>();
+        if (image != null)
+            image.color = color;
     }
 
     private void WireEntryButtons(int index)
@@ -648,7 +672,12 @@ public class MainMenuHtmlController : MonoBehaviour
 
     private void WireColorPickerButtons()
     {
-        var colorNames = new[] { "Red", "Orange", "Yellow", "Green", "Blue", "Purple" };
+        var colorNames = new[] 
+        { 
+            "Red", "Crimson", "Rose", "HotPink", "Magenta", "Coral",
+            "Blue", "SkyBlue", "Cyan", "Purple", "Indigo", "Violet",
+            "Green", "Mint", "Emerald", "Yellow", "Gold", "Orange"
+        };
         
         foreach (var colorName in colorNames)
         {
@@ -679,18 +708,15 @@ public class MainMenuHtmlController : MonoBehaviour
                 entry.color = selectedColor;
         }
 
-        // Update the UI - apply color to the entry background row
+        // Update the UI - apply color to all entry rows
         var entryRefs = _entryUiRows[_selectedEntryForColorPicker];
-        if (entryRefs.ControlsRow != null)
-        {
-            var image = entryRefs.ControlsRow.GetComponent<Image>();
-            if (image != null)
-            {
-                // Apply the color with slight darkening for UI visibility
-                var darkColor = new Color(selectedColor.r * 0.6f, selectedColor.g * 0.6f, selectedColor.b * 0.6f, 1f);
-                image.color = darkColor;
-            }
-        }
+        var darkColor = new Color(selectedColor.r * 0.5f, selectedColor.g * 0.5f, selectedColor.b * 0.5f, 1f);
+        
+        ApplyColorToRow(entryRefs.HeaderRow, darkColor);
+        ApplyColorToRow(entryRefs.NameRow, darkColor);
+        ApplyColorToRow(entryRefs.DurationHeaderRow, darkColor);
+        ApplyColorToRow(entryRefs.DurationRow, darkColor);
+        ApplyColorToRow(entryRefs.ControlsRow, darkColor);
 
         // Update the color button itself
         if (entryRefs.ColorButton != null)
