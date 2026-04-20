@@ -129,6 +129,10 @@ namespace TimeLoop.Core.UI
             ApplyLayout(node, rt, new Vector2(400f, 240f));
             ApplyFlex(node, panelGo);
 
+            var activeAttr = GetAttribute(node, "active", "true");
+            if (activeAttr.Equals("false", StringComparison.OrdinalIgnoreCase))
+                panelGo.SetActive(false);
+
             handler.RegisterElement(id, panelGo);
 
             foreach (XmlNode child in node.ChildNodes)
@@ -179,7 +183,8 @@ namespace TimeLoop.Core.UI
             var btn = go.GetComponent<Button>();
             var iconPath = GetAttribute(node, "icon", string.Empty);
             var labelText = GetAttribute(node, "text", string.Empty);
-            if (string.IsNullOrWhiteSpace(labelText) && string.IsNullOrWhiteSpace(iconPath))
+            var noLabel = GetAttribute(node, "noLabel", "false").Trim().ToLowerInvariant() == "true";
+            if (!noLabel && string.IsNullOrWhiteSpace(labelText) && string.IsNullOrWhiteSpace(iconPath))
                 labelText = id;
 
             var buttonFontSize = ParseInt(GetAttribute(node, "buttonFontSize", "40"), 40);
@@ -232,6 +237,10 @@ namespace TimeLoop.Core.UI
                     AppEvents.Publish(eventId, arg);
                 }
             });
+
+            var activeAttrBtn = GetAttribute(node, "active", "true");
+            if (activeAttrBtn.Equals("false", StringComparison.OrdinalIgnoreCase))
+                go.SetActive(false);
 
             handler.RegisterElement(id, go);
             return btn;

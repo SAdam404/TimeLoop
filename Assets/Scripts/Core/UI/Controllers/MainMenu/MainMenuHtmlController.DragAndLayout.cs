@@ -1,0 +1,744 @@
+using System;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+
+public partial class MainMenuHtmlController
+{
+    private void WireEntryDragSurface(GameObject dragSurface, int loopIndex, int index)
+    {
+        if (dragSurface == null)
+            return;
+
+        var surfaceImage = dragSurface.GetComponent<Image>();
+        if (surfaceImage != null)
+            surfaceImage.raycastTarget = true;
+
+        var relay = dragSurface.GetComponent<EntryDragRelay>() ?? dragSurface.AddComponent<EntryDragRelay>();
+        relay.Owner = this;
+        relay.LoopIndex = loopIndex;
+        relay.EntryIndex = index;
+    }
+
+    private void WireLoopDragTarget(LoopUiRefs loopUi, int loopIndex)
+    {
+        if (loopUi == null || loopUi.LoopDragHandle == null)
+            return;
+
+        var surfaceImage = loopUi.LoopDragHandle.GetComponent<Image>();
+        if (surfaceImage != null)
+            surfaceImage.raycastTarget = true;
+
+        var relay = loopUi.LoopDragHandle.GetComponent<LoopDragRelay>() ?? loopUi.LoopDragHandle.AddComponent<LoopDragRelay>();
+        relay.Owner = this;
+        relay.LoopIndex = loopIndex;
+
+        var images = loopUi.LoopDragHandle.GetComponentsInChildren<Image>(true);
+        for (var i = 0; i < images.Length; i++)
+        {
+            if (images[i] == null)
+                continue;
+
+            images[i].raycastTarget = images[i].gameObject == loopUi.LoopDragHandle;
+        }
+    }
+
+    private void OnLoopDragBegin(int loopIndex, PointerEventData eventData)
+    {
+        if (_isDraggingEntry || _isDraggingLoop)
+            return;
+
+        EnsureWorkingData();
+        SyncUiToWorkingData();
+
+        if (loopIndex < 0 || loopIndex >= _loopUiSections.Count || loopIndex >= _workingPreset.loops.Count)
+            return;
+
+        _entryDragSpace = _creationScrollContent;
+        if (_entryDragSpace == null)
+        {
+            var loopRoot = _loopUiSections[loopIndex].SectionRoot;
+            _entryDragSpace = loopRoot != null ? loopRoot.transform.parent as RectTransform : null;
+        }
+
+        _isDraggingLoop = true;
+        _loopDragCurrentIndex = loopIndex;
+        _loopDragStartPointerY = GetPointerYInDragSpace(eventData);
+        _loopDragLastPointerY = _loopDragStartPointerY;
+        _loopDragBaseSectionY = GetAnchoredY(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
+        _nextLoopSwapAllowedTime = 0f;
+        _lastLoopSwapDirection = 0;
+
+        SetCreationScrollEnabled(false);
+        BringLoopSectionInFrontOfAddLoop(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
+    }
+
+    private void OnLoopDragMove(PointerEventData eventData)
+    {
+        if (!_isDraggingLoop)
+            return;
+
+        _loopDragLastPointerY = GetPointerYInDragSpace(eventData);
+        var dragDeltaY = _loopDragLastPointerY - _loopDragStartPointerY;
+        ApplyDraggedLoopOffset(_loopDragCurrentIndex, dragDeltaY);
+        TryReorderLoopDuringDrag(_loopDragLastPointerY);
+
+        if (_loopDragCurrentIndex >= 0 && _loopDragCurrentIndex < _loopUiSections.Count)
+            BringLoopSectionInFrontOfAddLoop(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
+    }
+
+    private void OnLoopDragEnd(PointerEventData eventData)
+    {
+        if (!_isDraggingLoop)
+            return;
+
+        _loopDragLastPointerY = GetPointerYInDragSpace(eventData);
+        EndLoopDrag();
+    }
+
+    private void EndLoopDrag()
+    {
+        _isDraggingLoop = false;
+        _loopDragCurrentIndex = -1;
+        _loopDragStartPointerY = 0f;
+        _loopDragLastPointerY = 0f;
+        _loopDragBaseSectionY = 0f;
+        _nextLoopSwapAllowedTime = 0f;
+        _lastLoopSwapDirection = 0;
+        _entryDragSpace = null;
+
+        SetCreationScrollEnabled(true);
+        RebuildLoopSections();
+    }
+
+    private void TryReorderLoopDuringDrag(float pointerY)
+    {
+        if (!_isDraggingLoop || _loopDragCurrentIndex < 0 || _loopDragCurrentIndex >= _loopUiSections.Count)
+            return;
+
+        if (Time.unscaledTime < _nextLoopSwapAllowedTime)
+            return;
+
+        var fromIndex = _loopDragCurrentIndex;
+        var toIndex = CalculateLoopTargetIndex(pointerY);
+        if (toIndex < 0 || toIndex >= _loopUiSections.Count || toIndex == fromIndex)
+            return;
+
+        MoveLoopData(fromIndex, toIndex);
+        MoveLoopUiRefs(fromIndex, toIndex);
+        ApplyLoopSectionSiblingOrder();
+
+        var step = GetLoopDragStep(fromIndex);
+        _loopDragStartPointerY -= (toIndex - fromIndex) * step;
+        _loopDragLastPointerY = pointerY;
+        _lastLoopSwapDirection = Math.Sign(toIndex - fromIndex);
+        _loopDragCurrentIndex = toIndex;
+        _loopDragBaseSectionY = GetAnchoredY(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
+        _nextLoopSwapAllowedTime = Time.unscaledTime + 0.08f;
+
+        var dragDeltaY = _loopDragLastPointerY - _loopDragStartPointerY;
+        ApplyDraggedLoopOffset(_loopDragCurrentIndex, dragDeltaY);
+    }
+
+    private int CalculateLoopTargetIndex(float pointerY)
+    {
+        if (_loopDragCurrentIndex < 0 || _loopDragCurrentIndex >= _loopUiSections.Count)
+            return _loopDragCurrentIndex;
+
+        var deltaY = pointerY - _loopDragStartPointerY;
+        var swapThreshold = Mathf.Clamp(GetLoopDragStep(_loopDragCurrentIndex) * 0.35f, 96f, 220f);
+
+        var direction = 0; // +1 => move down, -1 => move up
+        if (deltaY <= -swapThreshold)
+            direction = 1;
+        else if (deltaY >= swapThreshold)
+            direction = -1;
+
+        if (direction == 0)
+            return _loopDragCurrentIndex;
+
+        if (_lastLoopSwapDirection != 0 && direction != _lastLoopSwapDirection)
+        {
+            var reverseThreshold = swapThreshold * 1.45f;
+            if (Mathf.Abs(deltaY) < reverseThreshold)
+                return _loopDragCurrentIndex;
+        }
+
+        if (direction > 0 && _loopDragCurrentIndex < _loopUiSections.Count - 1)
+            return _loopDragCurrentIndex + 1;
+
+        if (direction < 0 && _loopDragCurrentIndex > 0)
+            return _loopDragCurrentIndex - 1;
+
+        return _loopDragCurrentIndex;
+    }
+
+    private float GetLoopDragStep(int loopIndex)
+    {
+        if (loopIndex < 0 || loopIndex >= _loopUiSections.Count)
+            return 410f;
+
+        var sectionRoot = _loopUiSections[loopIndex].SectionRoot;
+        var rt = sectionRoot != null ? sectionRoot.GetComponent<RectTransform>() : null;
+        var height = rt != null ? Mathf.Max(320f, rt.rect.height) : 398f;
+
+        return height + 12f;
+    }
+
+    private void ApplyDraggedLoopOffset(int loopIndex, float deltaY)
+    {
+        if (loopIndex < 0 || loopIndex >= _loopUiSections.Count)
+            return;
+
+        var sectionRoot = _loopUiSections[loopIndex].SectionRoot;
+        if (sectionRoot == null)
+            return;
+
+        SetAnchoredY(sectionRoot, _loopDragBaseSectionY + deltaY);
+    }
+
+    private void MoveLoopData(int fromIndex, int toIndex)
+    {
+        if (_workingPreset == null || _workingPreset.loops == null)
+            return;
+
+        if (fromIndex < 0 || fromIndex >= _workingPreset.loops.Count || toIndex < 0 || toIndex >= _workingPreset.loops.Count || fromIndex == toIndex)
+            return;
+
+        var moved = _workingPreset.loops[fromIndex] ?? new Loop();
+        _workingPreset.loops.RemoveAt(fromIndex);
+        _workingPreset.loops.Insert(toIndex, moved);
+    }
+
+    private void MoveLoopUiRefs(int fromIndex, int toIndex)
+    {
+        if (fromIndex < 0 || fromIndex >= _loopUiSections.Count || toIndex < 0 || toIndex >= _loopUiSections.Count || fromIndex == toIndex)
+            return;
+
+        var moved = _loopUiSections[fromIndex];
+        _loopUiSections.RemoveAt(fromIndex);
+        _loopUiSections.Insert(toIndex, moved);
+    }
+
+    private void ApplyLoopSectionSiblingOrder()
+    {
+        var addLoopPanel = uiHandler != null ? uiHandler.GetElement("AddLoopPanel") : null;
+        if (addLoopPanel == null)
+            return;
+
+        var addLoopIndex = addLoopPanel.transform.GetSiblingIndex();
+        var firstLoopIndex = Mathf.Max(0, addLoopIndex - _loopUiSections.Count);
+
+        for (var i = 0; i < _loopUiSections.Count; i++)
+        {
+            var sectionRoot = _loopUiSections[i].SectionRoot;
+            if (sectionRoot != null)
+                sectionRoot.transform.SetSiblingIndex(firstLoopIndex + i);
+        }
+
+        addLoopPanel.transform.SetAsLastSibling();
+    }
+
+    private void OnEntryDragBegin(int loopIndex, int index, PointerEventData eventData)
+    {
+        if (_isDraggingLoop)
+            return;
+
+        EnsureWorkingData();
+        SyncUiToWorkingData();
+
+        if (loopIndex < 0 || loopIndex >= _loopUiSections.Count)
+            return;
+
+        var loopUi = _loopUiSections[loopIndex];
+        if (index < 0 || index >= loopUi.EntryRows.Count)
+            return;
+
+        _entryDragSpace = _creationScrollContent;
+        if (_entryDragSpace == null)
+        {
+            var dragSpaceGo = loopUi.EntryRows[index].NameRow;
+            _entryDragSpace = dragSpaceGo != null ? dragSpaceGo.transform.parent as RectTransform : null;
+            if (_entryDragSpace == null)
+                _entryDragSpace = loopUi.SectionRoot != null ? loopUi.SectionRoot.GetComponent<RectTransform>() : null;
+        }
+
+        _dragLoopIndex = loopIndex;
+        _dragStartIndex = index;
+        _dragCurrentIndex = index;
+        _dragStartPointerY = GetPointerYInDragSpace(eventData);
+        _dragLastPointerY = _dragStartPointerY;
+        _dragPointerDeltaY = 0f;
+        _isDraggingEntry = true;
+        _nextSwapAllowedTime = 0f;
+        _lastSwapDirection = 0;
+        _previewLoopIndex = -1;
+        _previewInsertIndex = -1;
+        SetCreationScrollEnabled(false);
+        BringDraggedEntryToFront(loopIndex, index);
+    }
+
+    private void OnEntryDragMove(PointerEventData eventData)
+    {
+        if (!_isDraggingEntry)
+            return;
+
+        if (_dragLoopIndex < 0 || _dragLoopIndex >= _workingPreset.loops.Count || _dragLoopIndex >= _loopUiSections.Count)
+            return;
+
+        var loop = _workingPreset.loops[_dragLoopIndex];
+        var loopUi = _loopUiSections[_dragLoopIndex];
+
+        _dragLastPointerY = GetPointerYInDragSpace(eventData);
+        _dragPointerDeltaY = _dragLastPointerY - _dragStartPointerY;
+
+        ApplyEntryLayoutForCount(loopUi, loop != null && loop.entries != null ? loop.entries.Count : loopUi.EntryRows.Count);
+        ApplyDraggedBlockOffset(_dragCurrentIndex, _dragPointerDeltaY);
+
+        TryReorderEntryDuringDrag(_dragLastPointerY);
+        ApplyCrossLoopPreview(_dragLastPointerY);
+    }
+
+    private void OnEntryDragEnd(PointerEventData eventData)
+    {
+        if (!_isDraggingEntry)
+            return;
+
+        _dragLastPointerY = GetPointerYInDragSpace(eventData);
+        EndEntryDrag(_dragLastPointerY);
+    }
+
+    private float GetPointerYInDragSpace(PointerEventData eventData)
+    {
+        if (_entryDragSpace != null && eventData != null)
+        {
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(_entryDragSpace, eventData.position, eventData.pressEventCamera, out var localPoint))
+                return localPoint.y;
+        }
+
+        return eventData != null ? eventData.position.y : 0f;
+    }
+
+    private int CalculateDragTargetIndex(float pointerY)
+    {
+        if (_dragLoopIndex < 0 || _dragLoopIndex >= _workingPreset.loops.Count || _dragLoopIndex >= _loopUiSections.Count)
+            return _dragCurrentIndex;
+
+        var loop = _workingPreset.loops[_dragLoopIndex];
+        var loopUi = _loopUiSections[_dragLoopIndex];
+        if (_dragCurrentIndex < 0 || loop == null || loop.entries == null || loop.entries.Count == 0)
+            return _dragCurrentIndex;
+
+        var deltaY = pointerY - _dragStartPointerY;
+        var swapThreshold = Mathf.Clamp(loopUi.EntryBlockYOffset * 0.42f, 72f, 180f);
+
+        if (Time.unscaledTime < _nextSwapAllowedTime)
+            return _dragCurrentIndex;
+
+        var direction = 0; // +1 => move down in list, -1 => move up in list
+
+        if (deltaY <= -swapThreshold)
+            direction = 1;
+        else if (deltaY >= swapThreshold)
+            direction = -1;
+
+        if (direction == 0)
+            return _dragCurrentIndex;
+
+        if (_lastSwapDirection != 0 && direction != _lastSwapDirection)
+        {
+            var reverseThreshold = swapThreshold * 1.45f;
+            if (Mathf.Abs(deltaY) < reverseThreshold)
+                return _dragCurrentIndex;
+        }
+
+        if (direction > 0 && _dragCurrentIndex < loop.entries.Count - 1)
+            return _dragCurrentIndex + 1;
+
+        if (direction < 0 && _dragCurrentIndex > 0)
+            return _dragCurrentIndex - 1;
+
+        return _dragCurrentIndex;
+    }
+
+    private void TryReorderEntryDuringDrag(float pointerY)
+    {
+        if (!_isDraggingEntry || _dragLoopIndex < 0 || _dragLoopIndex >= _workingPreset.loops.Count || _dragLoopIndex >= _loopUiSections.Count)
+            return;
+
+        var loop = _workingPreset.loops[_dragLoopIndex];
+        var loopUi = _loopUiSections[_dragLoopIndex];
+        if (loop == null || loop.entries == null || loop.entries.Count == 0)
+            return;
+
+        var fromIndex = _dragCurrentIndex;
+        var toIndex = CalculateDragTargetIndex(pointerY);
+        if (fromIndex < 0 || fromIndex >= loop.entries.Count || toIndex == fromIndex)
+            return;
+
+        MoveEntry(_dragLoopIndex, fromIndex, toIndex);
+        MoveEntryUiRefs(_dragLoopIndex, fromIndex, toIndex);
+
+        _dragStartPointerY -= (toIndex - fromIndex) * loopUi.EntryBlockYOffset;
+        _dragLastPointerY = pointerY;
+        _dragPointerDeltaY = _dragLastPointerY - _dragStartPointerY;
+        _lastSwapDirection = Math.Sign(toIndex - fromIndex);
+        _nextSwapAllowedTime = Time.unscaledTime + 0.08f;
+        _dragCurrentIndex = toIndex;
+
+        ApplyEntryLayoutForCount(loopUi, loop.entries.Count);
+        ApplyDraggedBlockOffset(_dragCurrentIndex, _dragPointerDeltaY);
+        BringDraggedEntryToFront(_dragLoopIndex, _dragCurrentIndex);
+    }
+
+    private void EndEntryDrag(float pointerY)
+    {
+        if (!_isDraggingEntry)
+            return;
+
+        var sourceLoopIndex = _dragLoopIndex;
+        var sourceEntryIndex = _dragCurrentIndex;
+
+        if (sourceLoopIndex >= 0 && sourceLoopIndex < _workingPreset.loops.Count)
+        {
+            ResolveDropTarget(pointerY, out var targetLoopIndex, out var targetEntryIndex);
+            if (targetLoopIndex >= 0)
+                MoveEntryToLoop(sourceLoopIndex, sourceEntryIndex, targetLoopIndex, targetEntryIndex);
+        }
+
+        ClearCrossLoopPreview();
+
+        _dragLastPointerY = pointerY;
+        _isDraggingEntry = false;
+        _dragLoopIndex = -1;
+        _dragStartIndex = -1;
+        _dragCurrentIndex = -1;
+        _dragPointerDeltaY = 0f;
+        _entryDragSpace = null;
+        _lastSwapDirection = 0;
+        _nextSwapAllowedTime = 0f;
+        SetCreationScrollEnabled(true);
+
+        SyncUiToWorkingData();
+        RebuildLoopSections();
+    }
+
+    private void ResolveDropTarget(float pointerY, out int targetLoopIndex, out int targetEntryIndex)
+    {
+        targetLoopIndex = -1;
+        targetEntryIndex = -1;
+
+        if (_loopUiSections.Count == 0)
+            return;
+
+        var closestLoopDistance = float.MaxValue;
+        for (var loopIndex = 0; loopIndex < _loopUiSections.Count; loopIndex++)
+        {
+            var loopUi = _loopUiSections[loopIndex];
+            if (loopUi == null || loopUi.SectionRoot == null)
+                continue;
+
+            var sectionCenterY = GetRectCenterYInDragSpace(loopUi.SectionRoot);
+            var loopDistance = Mathf.Abs(pointerY - sectionCenterY);
+            if (loopDistance < closestLoopDistance)
+            {
+                closestLoopDistance = loopDistance;
+                targetLoopIndex = loopIndex;
+            }
+        }
+
+        if (targetLoopIndex < 0 || targetLoopIndex >= _loopUiSections.Count)
+            return;
+
+        var targetLoopUi = _loopUiSections[targetLoopIndex];
+        if (targetLoopUi.EntryRows.Count == 0)
+        {
+            targetEntryIndex = 0;
+            return;
+        }
+
+        targetEntryIndex = targetLoopUi.EntryRows.Count;
+        for (var entryIndex = 0; entryIndex < targetLoopUi.EntryRows.Count; entryIndex++)
+        {
+            var row = targetLoopUi.EntryRows[entryIndex].NameRow;
+            var centerY = GetRectCenterYInDragSpace(row);
+            if (pointerY >= centerY)
+            {
+                targetEntryIndex = entryIndex;
+                return;
+            }
+        }
+    }
+
+    private float GetRectCenterYInDragSpace(GameObject go)
+    {
+        var rt = go != null ? go.GetComponent<RectTransform>() : null;
+        if (rt == null || _entryDragSpace == null)
+            return 0f;
+
+        var worldCenter = rt.TransformPoint(rt.rect.center);
+        var localCenter = _entryDragSpace.InverseTransformPoint(worldCenter);
+        return localCenter.y;
+    }
+
+    private void MoveEntryToLoop(int sourceLoopIndex, int sourceEntryIndex, int targetLoopIndex, int targetEntryIndex)
+    {
+        if (sourceLoopIndex < 0 || sourceLoopIndex >= _workingPreset.loops.Count)
+            return;
+        if (targetLoopIndex < 0 || targetLoopIndex >= _workingPreset.loops.Count)
+            return;
+
+        var sourceLoop = _workingPreset.loops[sourceLoopIndex];
+        var targetLoop = _workingPreset.loops[targetLoopIndex];
+        if (sourceLoop == null || targetLoop == null || sourceLoop.entries == null || targetLoop.entries == null)
+            return;
+        if (sourceEntryIndex < 0 || sourceEntryIndex >= sourceLoop.entries.Count)
+            return;
+
+        if (sourceLoopIndex == targetLoopIndex)
+        {
+            var clampedTargetIndex = Mathf.Clamp(targetEntryIndex, 0, sourceLoop.entries.Count - 1);
+            MoveEntry(sourceLoopIndex, sourceEntryIndex, clampedTargetIndex);
+            return;
+        }
+
+        var moved = sourceLoop.entries[sourceEntryIndex] ?? new Entry();
+        sourceLoop.entries.RemoveAt(sourceEntryIndex);
+
+        var insertIndex = Mathf.Clamp(targetEntryIndex, 0, targetLoop.entries.Count);
+        targetLoop.entries.Insert(insertIndex, moved);
+    }
+
+    private void ApplyCrossLoopPreview(float pointerY)
+    {
+        if (!_isDraggingEntry)
+            return;
+
+        ResolveDropTarget(pointerY, out var targetLoopIndex, out var targetEntryIndex);
+        if (targetLoopIndex < 0 || targetLoopIndex >= _loopUiSections.Count || targetLoopIndex == _dragLoopIndex)
+        {
+            ClearCrossLoopPreview();
+            return;
+        }
+
+        var targetLoop = _workingPreset.loops[targetLoopIndex];
+        var targetCount = targetLoop != null && targetLoop.entries != null ? targetLoop.entries.Count : 0;
+        var clampedInsertIndex = Mathf.Clamp(targetEntryIndex, 0, targetCount);
+
+        if (_previewLoopIndex == targetLoopIndex && _previewInsertIndex == clampedInsertIndex)
+            return;
+
+        ClearCrossLoopPreview();
+
+        var targetLoopUi = _loopUiSections[targetLoopIndex];
+        _previewLoopIndex = targetLoopIndex;
+        _previewInsertIndex = clampedInsertIndex;
+
+        ApplyEntryLayoutForCount(targetLoopUi, targetCount);
+        ApplyCrossLoopGapPreview(targetLoopUi, clampedInsertIndex);
+    }
+
+    private void ClearCrossLoopPreview()
+    {
+        if (_previewLoopIndex < 0 || _previewLoopIndex >= _loopUiSections.Count)
+        {
+            _previewLoopIndex = -1;
+            _previewInsertIndex = -1;
+            return;
+        }
+
+        var previewLoop = _workingPreset.loops[_previewLoopIndex];
+        var previewCount = previewLoop != null && previewLoop.entries != null ? previewLoop.entries.Count : 0;
+        ApplyEntryLayoutForCount(_loopUiSections[_previewLoopIndex], previewCount);
+
+        _previewLoopIndex = -1;
+        _previewInsertIndex = -1;
+    }
+
+    private void ApplyCrossLoopGapPreview(LoopUiRefs loopUi, int insertIndex)
+    {
+        if (loopUi == null || loopUi.EntryRows.Count == 0)
+            return;
+
+        for (var i = insertIndex; i < loopUi.EntryRows.Count; i++)
+        {
+            var refs = loopUi.EntryRows[i];
+            var previewOffset = -loopUi.EntryBlockYOffset * 0.55f;
+            ApplyOffsetToRow(refs.HeaderRow, previewOffset);
+            ApplyOffsetToRow(refs.NameRow, previewOffset);
+            ApplyOffsetToRow(refs.DurationHeaderRow, previewOffset);
+            ApplyOffsetToRow(refs.DurationRow, previewOffset);
+            ApplyOffsetToRow(refs.ControlsRow, previewOffset);
+        }
+    }
+
+    private void ApplyDraggedBlockOffset(int index, float deltaY)
+    {
+        if (_dragLoopIndex < 0 || _dragLoopIndex >= _loopUiSections.Count)
+            return;
+
+        var entryRows = _loopUiSections[_dragLoopIndex].EntryRows;
+        if (index < 0 || index >= entryRows.Count)
+            return;
+
+        var refs = entryRows[index];
+        ApplyOffsetToRow(refs.HeaderRow, deltaY);
+        ApplyOffsetToRow(refs.NameRow, deltaY);
+        ApplyOffsetToRow(refs.DurationHeaderRow, deltaY);
+        ApplyOffsetToRow(refs.DurationRow, deltaY);
+        ApplyOffsetToRow(refs.ControlsRow, deltaY);
+        BringDraggedEntryToFront(_dragLoopIndex, index);
+    }
+
+    private void BringDraggedEntryToFront(int loopIndex, int entryIndex)
+    {
+        if (loopIndex < 0 || loopIndex >= _loopUiSections.Count)
+            return;
+
+        var sectionRoot = _loopUiSections[loopIndex].SectionRoot;
+        if (sectionRoot != null)
+            BringLoopSectionInFrontOfAddLoop(sectionRoot);
+
+        var entryRows = _loopUiSections[loopIndex].EntryRows;
+        if (entryIndex < 0 || entryIndex >= entryRows.Count)
+            return;
+
+        var refs = entryRows[entryIndex];
+        BringRowToFront(refs.HeaderRow);
+        BringRowToFront(refs.NameRow);
+        BringRowToFront(refs.DurationHeaderRow);
+        BringRowToFront(refs.DurationRow);
+        BringRowToFront(refs.ControlsRow);
+    }
+
+    private void BringLoopSectionInFrontOfAddLoop(GameObject sectionRoot)
+    {
+        if (sectionRoot == null)
+            return;
+
+        var addLoopPanel = uiHandler != null ? uiHandler.GetElement("AddLoopPanel") : null;
+        if (addLoopPanel == null || addLoopPanel.transform.parent != sectionRoot.transform.parent)
+        {
+            sectionRoot.transform.SetAsLastSibling();
+            return;
+        }
+
+        var addLoopIndex = addLoopPanel.transform.GetSiblingIndex();
+        var targetIndex = Mathf.Max(0, addLoopIndex - 1);
+        sectionRoot.transform.SetSiblingIndex(targetIndex);
+        addLoopPanel.transform.SetAsLastSibling();
+    }
+
+    private static void BringRowToFront(GameObject row)
+    {
+        if (row == null)
+            return;
+
+        row.transform.SetAsLastSibling();
+    }
+
+    private static void ApplyOffsetToRow(GameObject row, float deltaY)
+    {
+        if (row == null)
+            return;
+
+        var rt = row.GetComponent<RectTransform>();
+        if (rt == null)
+            return;
+
+        var pos = rt.anchoredPosition;
+        pos.y += deltaY;
+        rt.anchoredPosition = pos;
+    }
+
+    private void MoveEntryUiRefs(int loopIndex, int fromIndex, int toIndex)
+    {
+        if (loopIndex < 0 || loopIndex >= _loopUiSections.Count)
+            return;
+
+        var entryRows = _loopUiSections[loopIndex].EntryRows;
+        if (fromIndex < 0 || fromIndex >= entryRows.Count || toIndex < 0 || toIndex >= entryRows.Count || fromIndex == toIndex)
+            return;
+
+        var moved = entryRows[fromIndex];
+        entryRows.RemoveAt(fromIndex);
+        entryRows.Insert(toIndex, moved);
+    }
+
+    private void SetCreationScrollEnabled(bool enabled)
+    {
+        if (_creationScrollRect != null)
+            _creationScrollRect.enabled = enabled;
+    }
+
+    private void MoveEntry(int loopIndex, int fromIndex, int toIndex)
+    {
+        if (loopIndex < 0 || loopIndex >= _workingPreset.loops.Count)
+            return;
+
+        var loop = _workingPreset.loops[loopIndex];
+        if (loop == null || loop.entries == null)
+            return;
+
+        if (fromIndex < 0 || fromIndex >= loop.entries.Count || toIndex < 0 || toIndex >= loop.entries.Count || fromIndex == toIndex)
+            return;
+
+        var moved = loop.entries[fromIndex] ?? new Entry();
+        loop.entries.RemoveAt(fromIndex);
+
+        loop.entries.Insert(toIndex, moved);
+    }
+
+    private void ApplyEntryLayoutForCount(LoopUiRefs loopUi, int count)
+    {
+        if (loopUi == null || loopUi.SectionRoot == null || loopUi.AddButtonsRow == null)
+            return;
+
+        var effectiveCount = Mathf.Max(0, count);
+        var extra = effectiveCount - 1;
+
+        if (extra < -1)
+            extra = -1;
+
+        for (var i = 0; i < loopUi.EntryRows.Count; i++)
+        {
+            var offset = loopUi.EntryBlockYOffset * i;
+            SetAnchoredY(loopUi.EntryRows[i].HeaderRow, loopUi.BaseEntryRowHeaderY - offset);
+            SetAnchoredY(loopUi.EntryRows[i].NameRow, loopUi.BaseEntryRowY - offset);
+            SetAnchoredY(loopUi.EntryRows[i].DurationHeaderRow, loopUi.BaseEntryDurationHeaderY - offset);
+            SetAnchoredY(loopUi.EntryRows[i].DurationRow, loopUi.BaseEntryDurationRowY - offset);
+            SetAnchoredY(loopUi.EntryRows[i].ControlsRow, loopUi.BaseEntryControlsRowY - offset);
+        }
+
+        SetAnchoredY(loopUi.AddButtonsRow, loopUi.BaseAddButtonsY - loopUi.EntryBlockYOffset * extra);
+
+        var loopSectionRt = loopUi.SectionRoot.GetComponent<RectTransform>();
+        if (loopSectionRt != null)
+        {
+            var size = loopSectionRt.sizeDelta;
+            size.y = loopUi.BaseLoopSectionHeight + loopUi.EntryBlockYOffset * extra;
+            loopSectionRt.sizeDelta = size;
+        }
+
+        var loopSectionLe = loopUi.SectionRoot.GetComponent<LayoutElement>();
+        if (loopSectionLe != null)
+            loopSectionLe.preferredHeight = loopUi.BaseLoopSectionPreferredHeight + loopUi.EntryBlockYOffset * extra;
+    }
+
+    private static float GetAnchoredY(GameObject go)
+    {
+        var rt = go != null ? go.GetComponent<RectTransform>() : null;
+        return rt != null ? rt.anchoredPosition.y : 0f;
+    }
+
+    private static void SetAnchoredY(GameObject go, float y)
+    {
+        var rt = go != null ? go.GetComponent<RectTransform>() : null;
+        if (rt == null)
+            return;
+
+        var pos = rt.anchoredPosition;
+        pos.y = y;
+        rt.anchoredPosition = pos;
+    }
+}

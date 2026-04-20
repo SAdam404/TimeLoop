@@ -1,0 +1,141 @@
+using UnityEngine;
+using UnityEngine.UI;
+
+public partial class MainMenuHtmlController
+{
+    private void OnColorButtonPressed(int loopIndex, int index)
+    {
+        if (loopIndex < 0 || loopIndex >= _loopUiSections.Count)
+            return;
+
+        if (index < 0 || index >= _loopUiSections[loopIndex].EntryRows.Count)
+            return;
+
+        _selectedLoopForColorPicker = loopIndex;
+        _selectedEntryForColorPicker = index;
+        ShowColorPicker();
+    }
+
+    private void ShowColorPicker()
+    {
+        var colorPickerPanel = uiHandler.GetElement("ColorPickerPanel");
+        if (colorPickerPanel != null)
+            colorPickerPanel.SetActive(true);
+
+        var overlay = uiHandler.GetElement("ColorPickerOverlay");
+        if (overlay != null)
+        {
+            overlay.SetActive(true);
+            var overlayButton = overlay.GetComponent<Button>();
+            if (overlayButton != null)
+            {
+                overlayButton.onClick.RemoveAllListeners();
+                overlayButton.onClick.AddListener(HideColorPicker);
+            }
+        }
+
+        WireColorPickerButtons();
+    }
+
+    private void HideColorPicker()
+    {
+        var colorPickerPanel = uiHandler.GetElement("ColorPickerPanel");
+        if (colorPickerPanel != null)
+            colorPickerPanel.SetActive(false);
+
+        var overlay = uiHandler.GetElement("ColorPickerOverlay");
+        if (overlay != null)
+            overlay.SetActive(false);
+    }
+
+    private void WireColorPickerButtons()
+    {
+        var colorNames = new[]
+        {
+            "Red", "Crimson", "Rose", "HotPink", "Magenta", "Coral",
+            "Blue", "SkyBlue", "Cyan", "Purple", "Indigo", "Violet",
+            "Green", "Mint", "Emerald", "Yellow", "Gold", "Orange"
+        };
+
+        foreach (var colorName in colorNames)
+        {
+            var buttonId = $"ColorPicker_{colorName}";
+            var button = GetButton(buttonId);
+            if (button != null)
+            {
+                button.onClick.RemoveAllListeners();
+                var capturedColor = colorName;
+                button.onClick.AddListener(() => OnColorSelected(capturedColor));
+            }
+        }
+    }
+
+    private void OnColorSelected(string colorName)
+    {
+        if (_selectedLoopForColorPicker < 0 || _selectedLoopForColorPicker >= _loopUiSections.Count)
+            return;
+
+        if (_selectedLoopForColorPicker >= _workingPreset.loops.Count)
+            return;
+
+        var loop = _workingPreset.loops[_selectedLoopForColorPicker];
+        var entryRows = _loopUiSections[_selectedLoopForColorPicker].EntryRows;
+        if (_selectedEntryForColorPicker < 0 || _selectedEntryForColorPicker >= entryRows.Count)
+            return;
+
+        if (!ColorMap.TryGetValue(colorName, out var selectedColor))
+            selectedColor = Color.white;
+
+        if (loop != null && loop.entries != null && _selectedEntryForColorPicker < loop.entries.Count)
+        {
+            var entry = loop.entries[_selectedEntryForColorPicker];
+            if (entry != null)
+                entry.color = selectedColor;
+        }
+
+        var entryRefs = entryRows[_selectedEntryForColorPicker];
+        if (entryRefs.ColorButton != null)
+        {
+            var buttonImage = entryRefs.ColorButton.GetComponent<Image>();
+            if (buttonImage != null)
+                buttonImage.color = selectedColor;
+        }
+
+        _selectedLoopForColorPicker = -1;
+        _selectedEntryForColorPicker = -1;
+        HideColorPicker();
+    }
+
+    private static int ParseDurationToSeconds(string duration)
+    {
+        if (string.IsNullOrWhiteSpace(duration))
+            return 0;
+
+        var parts = duration.Split(':');
+        if (parts.Length == 2)
+        {
+            var minutes = 0;
+            var seconds = 0;
+
+            int.TryParse(parts[0], out minutes);
+            int.TryParse(parts[1], out seconds);
+
+            minutes = Mathf.Clamp(minutes, 0, 99);
+            seconds = Mathf.Clamp(seconds, 0, 59);
+            return minutes * 60 + seconds;
+        }
+
+        if (int.TryParse(duration, out var rawSeconds))
+            return Mathf.Clamp(rawSeconds, 0, 5999);
+
+        return 0;
+    }
+
+    private static string FormatSeconds(int totalSeconds)
+    {
+        totalSeconds = Mathf.Clamp(totalSeconds, 0, 5999);
+        var minutes = totalSeconds / 60;
+        var seconds = totalSeconds % 60;
+        return $"{minutes:00}:{seconds:00}";
+    }
+}

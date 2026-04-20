@@ -63,9 +63,9 @@
       </panel>
 
       <panel id="LoopSection"
-                height="1430"
-                preferredHeight="1430"
-             background="#1D2238FF">
+             height="872"
+             preferredHeight="872"
+           background="#1D2238FF">
 
         <text id="LoopSectionTitle"
               anchor="top-left"
@@ -90,6 +90,18 @@
            <text id="RepeatLabel" preferredWidth="300" preferredHeight="84" value="Repeat" fontSize="48" align="middle-right" color="#8D98C4FF"/>
         </row>
 
+        <panel id="LoopDragHandle"
+               anchor="top-right"
+               x="-10"
+               y="-76"
+               width="92"
+               height="92"
+               background="#2D3557FF">
+          <separator id="LoopDragLine1" anchor="top-center" y="-24" width="36" thickness="4" color="#93A8E8FF"/>
+          <separator id="LoopDragLine2" anchor="top-center" y="-46" width="36" thickness="4" color="#93A8E8FF"/>
+          <separator id="LoopDragLine3" anchor="top-center" y="-68" width="36" thickness="4" color="#93A8E8FF"/>
+        </panel>
+
         <row id="LoopRepeatControlsRow"
              anchor="top-center"
              x="0"
@@ -103,56 +115,50 @@
           <button id="LoopRepeatPlus" flex="1" preferredHeight="88" text="+" buttonFontSize="64" buttonColor="#38405EFF" textColor="#FFFFFFFF"/>
         </row>
 
-           <separator id="LoopSeparator" anchor="top-center" x="0" y="-302" widthPercent="1" thickness="2" color="#FFFFFF22"/>
-
-        <text id="EntriesTitle"
-              anchor="top-left"
-              x="16"
-            y="-356"
-              width="420"
-              height="70"
-              value="Entries"
-              fontSize="56"
-              align="middle-left"
-              color="#C7D1F7FF"/>
-
         <row id="EntryRowHeader"
              anchor="top-center"
              x="0"
-             y="-430"
+             y="-360"
              widthPercent="1"
              height="60"
              spacing="8"
-             background="transparent">
+             background="transparent"
+             active="false">
            <text id="EntryNameHead" flex="1" preferredHeight="54" value="Name" fontSize="44" align="middle-left" color="#8D98C4FF"/>
         </row>
 
         <row id="EntryRow1"
              anchor="top-center"
              x="0"
-             y="-500"
+             y="-360"
              widthPercent="1"
              height="110"
              spacing="8"
              background="#252C48FF">
-            <inputfield id="Entry1Name" flex="1" preferredHeight="92" value="Warmup" placeholder="Entry name" inputType="name" maxLength="24" background="#262C45FF" color="#FFFFFFFF" fontSize="52"/>
+            <inputfield id="Entry1Name" flex="1" preferredHeight="92" value="Warmup" placeholder="Entry name" inputType="standard" maxLength="40" background="#262C45FF" color="#FFFFFFFF" fontSize="52"/>
+            <panel id="Entry1DragHandle" preferredWidth="92" preferredHeight="92" background="#2D3557FF">
+              <separator id="Entry1DragLine1" anchor="top-center" y="-24" width="36" thickness="4" color="#93A8E8FF"/>
+              <separator id="Entry1DragLine2" anchor="top-center" y="-46" width="36" thickness="4" color="#93A8E8FF"/>
+              <separator id="Entry1DragLine3" anchor="top-center" y="-68" width="36" thickness="4" color="#93A8E8FF"/>
+            </panel>
         </row>
 
         <row id="EntryDurationHeader"
              anchor="top-center"
              x="0"
-             y="-622"
+             y="-482"
              widthPercent="1"
              height="60"
              spacing="8"
-             background="transparent">
+             background="transparent"
+             active="false">
            <text id="EntryDurationHead" flex="1" preferredHeight="54" value="Duration (MM:SS)" fontSize="44" align="middle-left" color="#8D98C4FF"/>
         </row>
 
         <row id="EntryDurationRow"
              anchor="top-center"
              x="0"
-             y="-692"
+             y="-482"
              widthPercent="1"
              height="110"
              spacing="8"
@@ -165,20 +171,20 @@
         <row id="EntryControlsRow"
              anchor="top-center"
              x="0"
-             y="-814"
+             y="-604"
              widthPercent="1"
              height="110"
              spacing="12"
              background="#252C48FF">
           <button id="Entry1Color" flex="1" preferredHeight="92" text="Color" buttonFontSize="42" buttonColor="#3B6FF5FF" textColor="#FFFFFFFF"/>
-          <button id="Entry1Dup" flex="1" preferredHeight="92" text="Duplicate" buttonFontSize="42" icon="TimeLoop/Icons/ic_duplicate" iconSize="36" iconAlign="left" buttonColor="#38405EFF" textColor="#FFFFFFFF"/>
-          <button id="Entry1Delete" flex="1" preferredHeight="92" text="Delete" buttonFontSize="42" icon="TimeLoop/Icons/ic_delete" iconSize="36" iconAlign="left" buttonColor="#7A2A32FF" textColor="#FFFFFFFF"/>
+          <button id="Entry1Dup" flex="1" preferredHeight="92" text="Duplicate" buttonFontSize="42" buttonColor="#38405EFF" textColor="#FFFFFFFF"/>
+          <button id="Entry1Delete" flex="1" preferredHeight="92" text="Delete" buttonFontSize="42" buttonColor="#7A2A32FF" textColor="#FFFFFFFF"/>
         </row>
 
         <row id="AddButtonsRow"
              anchor="top-center"
              x="0"
-             y="-968"
+             y="-758"
              widthPercent="1"
              height="110"
              spacing="12"
@@ -186,25 +192,23 @@
           <button id="AddEntryBtn"
                   flex="1"
                   preferredHeight="96"
-                  text="Add Entry"
+                  text="+ Add Entry"
                   buttonFontSize="42"
-                  icon="TimeLoop/Icons/ic_add"
-                  iconSize="36"
-                  iconAlign="left"
-                  buttonColor="#38405EFF"
-                  textColor="#FFFFFFFF"/>
-          <button id="AddLoopBtn"
-                  flex="1"
-                  preferredHeight="96"
-                  text="Add Loop"
-                  buttonFontSize="42"
-                  icon="TimeLoop/Icons/ic_add"
-                  iconSize="36"
-                  iconAlign="left"
                   buttonColor="#38405EFF"
                   textColor="#FFFFFFFF"/>
         </row>
 
+      </panel>
+
+      <panel id="AddLoopPanel" height="110" preferredHeight="110" background="transparent">
+        <button id="AddLoopBtn"
+                anchor="middle-center"
+                widthPercent="1"
+                height="96"
+                text="+ Add Loop"
+                buttonFontSize="42"
+                buttonColor="#38405EFF"
+                textColor="#FFFFFFFF"/>
       </panel>
 
     </scrollview>
@@ -238,6 +242,9 @@
               textColor="#C5CCE4FF"/>
     </panel>
 
+    <!-- Transparent overlay to close color picker when clicking outside -->
+    <button id="ColorPickerOverlay" anchor="middle-center" stretch="true" buttonColor="#00000000" textColor="#00000000" active="false"/>
+
     <panel id="ColorPickerPanel" anchor="bottom-center" widthPercent="1" height="460" background="#0D0F1AFF" active="false">
       <row id="ColorPickerRow1"
            anchor="top-center"
@@ -247,12 +254,12 @@
            height="130"
            spacing="6"
            background="transparent">
-        <button id="ColorPicker_Red" flex="1" preferredHeight="120" buttonColor="#E53935FF" textColor="#000000FF"/>
-        <button id="ColorPicker_Crimson" flex="1" preferredHeight="120" buttonColor="#DC143CFF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_Rose" flex="1" preferredHeight="120" buttonColor="#E91E63FF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_HotPink" flex="1" preferredHeight="120" buttonColor="#FF1493FF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_Magenta" flex="1" preferredHeight="120" buttonColor="#FF00FFFF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_Coral" flex="1" preferredHeight="120" buttonColor="#FF7F50FF" textColor="#000000FF"/>
+        <button id="ColorPicker_Red" flex="1" preferredHeight="120" noLabel="true" buttonColor="#E53935FF"/>
+        <button id="ColorPicker_Crimson" flex="1" preferredHeight="120" noLabel="true" buttonColor="#DC143CFF"/>
+        <button id="ColorPicker_Rose" flex="1" preferredHeight="120" noLabel="true" buttonColor="#E91E63FF"/>
+        <button id="ColorPicker_HotPink" flex="1" preferredHeight="120" noLabel="true" buttonColor="#FF1493FF"/>
+        <button id="ColorPicker_Magenta" flex="1" preferredHeight="120" noLabel="true" buttonColor="#FF00FFFF"/>
+        <button id="ColorPicker_Coral" flex="1" preferredHeight="120" noLabel="true" buttonColor="#FF7F50FF"/>
       </row>
 
       <row id="ColorPickerRow2"
@@ -263,12 +270,12 @@
            height="130"
            spacing="6"
            background="transparent">
-        <button id="ColorPicker_Blue" flex="1" preferredHeight="120" buttonColor="#3B6FF5FF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_SkyBlue" flex="1" preferredHeight="120" buttonColor="#00BCDEFF" textColor="#000000FF"/>
-        <button id="ColorPicker_Cyan" flex="1" preferredHeight="120" buttonColor="#00FFFFFF" textColor="#000000FF"/>
-        <button id="ColorPicker_Purple" flex="1" preferredHeight="120" buttonColor="#8E24AAFF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_Indigo" flex="1" preferredHeight="120" buttonColor="#4B0082FF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_Violet" flex="1" preferredHeight="120" buttonColor="#9400D3FF" textColor="#FFFFFFFF"/>
+        <button id="ColorPicker_Blue" flex="1" preferredHeight="120" noLabel="true" buttonColor="#3B6FF5FF"/>
+        <button id="ColorPicker_SkyBlue" flex="1" preferredHeight="120" noLabel="true" buttonColor="#00BCDEFF"/>
+        <button id="ColorPicker_Cyan" flex="1" preferredHeight="120" noLabel="true" buttonColor="#00FFFFFF"/>
+        <button id="ColorPicker_Purple" flex="1" preferredHeight="120" noLabel="true" buttonColor="#8E24AAFF"/>
+        <button id="ColorPicker_Indigo" flex="1" preferredHeight="120" noLabel="true" buttonColor="#4B0082FF"/>
+        <button id="ColorPicker_Violet" flex="1" preferredHeight="120" noLabel="true" buttonColor="#9400D3FF"/>
       </row>
 
       <row id="ColorPickerRow3"
@@ -279,12 +286,12 @@
            height="130"
            spacing="6"
            background="transparent">
-        <button id="ColorPicker_Green" flex="1" preferredHeight="120" buttonColor="#43A047FF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_Mint" flex="1" preferredHeight="120" buttonColor="#00E676FF" textColor="#000000FF"/>
-        <button id="ColorPicker_Emerald" flex="1" preferredHeight="120" buttonColor="#00C853FF" textColor="#FFFFFFFF"/>
-        <button id="ColorPicker_Yellow" flex="1" preferredHeight="120" buttonColor="#FDD835FF" textColor="#000000FF"/>
-        <button id="ColorPicker_Gold" flex="1" preferredHeight="120" buttonColor="#FFD700FF" textColor="#000000FF"/>
-        <button id="ColorPicker_Orange" flex="1" preferredHeight="120" buttonColor="#FB8C00FF" textColor="#000000FF"/>
+        <button id="ColorPicker_Green" flex="1" preferredHeight="120" noLabel="true" buttonColor="#43A047FF"/>
+        <button id="ColorPicker_Mint" flex="1" preferredHeight="120" noLabel="true" buttonColor="#00E676FF"/>
+        <button id="ColorPicker_Emerald" flex="1" preferredHeight="120" noLabel="true" buttonColor="#00C853FF"/>
+        <button id="ColorPicker_Yellow" flex="1" preferredHeight="120" noLabel="true" buttonColor="#FDD835FF"/>
+        <button id="ColorPicker_Gold" flex="1" preferredHeight="120" noLabel="true" buttonColor="#FFD700FF"/>
+        <button id="ColorPicker_Orange" flex="1" preferredHeight="120" noLabel="true" buttonColor="#FB8C00FF"/>
       </row>
     </panel>
 

@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using TimeLoop.Core.Events;
 using TimeLoop.Core.UI;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 [RequireComponent(typeof(UIHandler))]
-public class MainMenuHtmlController : MonoBehaviour
+public partial class MainMenuHtmlController : MonoBehaviour
 {
     private const string MainMenuSceneName = "MainMenuScene";
     private const string TimerCreationSceneName = "TimerCreationScene";
@@ -19,21 +20,32 @@ public class MainMenuHtmlController : MonoBehaviour
     private List<TimerPreset> _presets;
     private Font _font;
     private TimerPreset _workingPreset;
-    private Loop _workingLoop;
 
-    private float _entryBlockYOffset = 384f;
-    private bool _entryLayoutInitialized;
-    private float _baseLoopSectionHeight;
-    private float _baseLoopSectionPreferredHeight;
-    private float _baseAddButtonsY;
-    private float _baseEntryRowHeaderY;
-    private float _baseEntryRowY;
-    private float _baseEntryDurationHeaderY;
-    private float _baseEntryDurationRowY;
-    private float _baseEntryControlsRowY;
+    private readonly List<LoopUiRefs> _loopUiSections = new List<LoopUiRefs>();
+    private readonly List<GameObject> _dynamicLoopObjects = new List<GameObject>();
 
-    private readonly List<EntryUiRefs> _entryUiRows = new List<EntryUiRefs>();
-    private readonly List<GameObject> _dynamicEntryObjects = new List<GameObject>();
+    private int _dragLoopIndex = -1;
+    private int _dragStartIndex = -1;
+    private int _dragCurrentIndex = -1;
+    private float _dragStartPointerY;
+    private float _dragLastPointerY;
+    private float _dragPointerDeltaY;
+    private bool _isDraggingEntry;
+    private ScrollRect _creationScrollRect;
+    private RectTransform _entryDragSpace;
+    private RectTransform _creationScrollContent;
+    private float _nextSwapAllowedTime;
+    private int _lastSwapDirection;
+    private int _previewLoopIndex = -1;
+    private int _previewInsertIndex = -1;
+
+    private int _loopDragCurrentIndex = -1;
+    private float _loopDragStartPointerY;
+    private float _loopDragLastPointerY;
+    private float _loopDragBaseSectionY;
+    private bool _isDraggingLoop;
+    private float _nextLoopSwapAllowedTime;
+    private int _lastLoopSwapDirection;
 
     // Color picker colors
     private static readonly Dictionary<string, Color> ColorMap = new Dictionary<string, Color>
@@ -63,24 +75,8 @@ public class MainMenuHtmlController : MonoBehaviour
         { "Orange", new Color(0.992f, 0.549f, 0f, 1f) }           // #FB8C00FF
     };
 
+    private int _selectedLoopForColorPicker = -1;
     private int _selectedEntryForColorPicker = -1;
-
-    private sealed class EntryUiRefs
-    {
-        public GameObject HeaderRow;
-        public GameObject NameRow;
-        public GameObject DurationHeaderRow;
-        public GameObject DurationRow;
-        public GameObject ControlsRow;
-
-        public InputField NameInput;
-        public InputField DurationInput;
-        public Button DurationMinusButton;
-        public Button DurationPlusButton;
-        public Button ColorButton;
-        public Button DuplicateButton;
-        public Button DeleteButton;
-    }
 
     private void Awake()
     {
@@ -118,297 +114,119 @@ public class MainMenuHtmlController : MonoBehaviour
         HandleScene(scene);
     }
 
-    private void HandleScene(Scene scene)
-    {
-        if (!scene.IsValid())
-            return;
-
-        if (scene.name.Equals(MainMenuSceneName))
-        {
-            BuildMainMenu();
-            return;
-        }
-
-        if (scene.name.Equals(TimerCreationSceneName))
-        {
-            BuildTimerCreationMenu();
-            return;
-        }
-
-        uiHandler.ClearGeneratedUi();
-    }
-
-    private void BuildMainMenu()
-    {
-        var htmlAsset = Resources.Load<TextAsset>(MainMenuResourcePath);
-        if (htmlAsset == null)
-        {
-            Debug.LogWarning($"Main menu HTML not found at Resources/{MainMenuResourcePath}.");
-            return;
-        }
-
-        uiHandler.ChangeHtml(htmlAsset, true);
-        LoadAndRefresh();
-    }
-
-    private void BuildTimerCreationMenu()
-    {
-        var htmlAsset = Resources.Load<TextAsset>(TimerCreationResourcePath);
-        if (htmlAsset == null)
-        {
-            Debug.LogWarning($"Timer creation HTML not found at Resources/{TimerCreationResourcePath}.");
-            return;
-        }
-
-        uiHandler.ChangeHtml(htmlAsset, true);
-
-        _entryLayoutInitialized = false;
-        ClearDynamicEntryObjects();
-        _entryUiRows.Clear();
-
-        if (UIManager.CurrentPreset != null)
-            uiHandler.SetInputText("PresetNameInput", UIManager.CurrentPreset.name);
-
-        EnsureWorkingData();
-        uiHandler.SetInputText("PresetNameInput", _workingPreset.name);
-
-        // Hide color picker on scene load
-        HideColorPicker();
-
-        var backButtonObject = uiHandler.GetElement("BackBtn");
-        var backButton = backButtonObject != null ? backButtonObject.GetComponent<Button>() : null;
-        if (backButton != null)
-        {
-            backButton.onClick.RemoveAllListeners();
-            backButton.onClick.AddListener(GoBackToMainMenu);
-        }
-
-        var loopRepeatMinusButton = GetButton("LoopRepeatMinus");
-        if (loopRepeatMinusButton != null)
-        {
-            loopRepeatMinusButton.onClick.RemoveAllListeners();
-            loopRepeatMinusButton.onClick.AddListener(() => AdjustRepeat(-1));
-        }
-
-        var loopRepeatPlusButton = GetButton("LoopRepeatPlus");
-        if (loopRepeatPlusButton != null)
-        {
-            loopRepeatPlusButton.onClick.RemoveAllListeners();
-            loopRepeatPlusButton.onClick.AddListener(() => AdjustRepeat(1));
-        }
-
-        var addEntryButton = GetButton("AddEntryBtn");
-        if (addEntryButton != null)
-        {
-            addEntryButton.onClick.RemoveAllListeners();
-            addEntryButton.onClick.AddListener(OnAddEntryPressed);
-        }
-
-        RebuildEntryRows();
-    }
-
-    private Button GetButton(string elementId)
-    {
-        var buttonObject = uiHandler.GetElement(elementId);
-        return buttonObject != null ? buttonObject.GetComponent<Button>() : null;
-    }
-
-    private void AdjustRepeat(int delta)
+    private void RebuildLoopSections()
     {
         EnsureWorkingData();
-        var currentText = uiHandler.GetInputText("LoopRepeatInput");
-        if (!int.TryParse(currentText, out var currentValue))
-            currentValue = _workingLoop.repeatCount;
+        ClearDynamicLoopUi();
+        _loopUiSections.Clear();
 
-        var nextValue = Mathf.Clamp(currentValue + delta, 1, 99);
-        _workingLoop.repeatCount = nextValue;
-        uiHandler.SetInputText("LoopRepeatInput", nextValue.ToString());
-    }
-
-    private void OnAddEntryPressed()
-    {
-        EnsureWorkingData();
-        SyncUiToWorkingData();
-
-        _workingLoop.entries.Add(new Entry());
-        RebuildEntryRows();
-    }
-
-    private void OnDuplicateEntryPressed(int index)
-    {
-        EnsureWorkingData();
-        SyncUiToWorkingData();
-
-        if (index < 0 || index >= _workingLoop.entries.Count)
+        var firstSectionRoot = uiHandler.GetElement("LoopSection");
+        if (firstSectionRoot == null)
             return;
 
-        var source = _workingLoop.entries[index];
-        if (index < _entryUiRows.Count)
+        var addLoopPanel = uiHandler.GetElement("AddLoopPanel");
+
+        var firstSection = BuildLoopUiRefs(firstSectionRoot);
+        if (firstSection == null)
+            return;
+
+        _loopUiSections.Add(firstSection);
+
+        for (var i = 1; i < _workingPreset.loops.Count; i++)
         {
-            var sourceUi = _entryUiRows[index];
-            if (sourceUi != null)
-            {
-                var sourceName = sourceUi.NameInput != null ? sourceUi.NameInput.text : null;
-                var sourceDuration = sourceUi.DurationInput != null ? sourceUi.DurationInput.text : null;
-
-                if (source == null)
-                    source = new Entry();
-
-                source.name = string.IsNullOrWhiteSpace(sourceName) ? "New Entry" : sourceName.Trim();
-                source.durationSeconds = ParseDurationToSeconds(sourceDuration);
-                _workingLoop.entries[index] = source;
-            }
+            var cloneRoot = CloneLoopSection(firstSectionRoot, addLoopPanel, i);
+            var clonedSection = BuildLoopUiRefs(cloneRoot);
+            if (clonedSection != null)
+                _loopUiSections.Add(clonedSection);
         }
 
-        var clone = new Entry
+        for (var loopIndex = 0; loopIndex < _loopUiSections.Count && loopIndex < _workingPreset.loops.Count; loopIndex++)
         {
-            name = source?.name ?? "New Entry",
-            durationSeconds = source != null ? Mathf.Max(0f, source.durationSeconds) : 60f,
-            color = source != null ? source.color : Color.white
-        };
+            var loopUi = _loopUiSections[loopIndex];
+            var loop = _workingPreset.loops[loopIndex] ?? new Loop();
+            _workingPreset.loops[loopIndex] = loop;
 
-        _workingLoop.entries.Insert(index + 1, clone);
-        RebuildEntryRows();
-    }
-
-    private void OnDeleteEntryPressed(int index)
-    {
-        EnsureWorkingData();
-        SyncUiToWorkingData();
-
-        if (index < 0 || index >= _workingLoop.entries.Count)
-            return;
-
-        _workingLoop.entries.RemoveAt(index);
-
-        // Keep one editable entry visible even after deleting the last one.
-        if (_workingLoop.entries.Count == 0)
-            _workingLoop.entries.Add(new Entry());
-
-        RebuildEntryRows();
-    }
-
-    private void OnEntryDurationAdjust(int index, int deltaSeconds)
-    {
-        if (index < 0 || index >= _entryUiRows.Count)
-            return;
-
-        var entryRow = _entryUiRows[index];
-        if (entryRow.DurationInput == null)
-            return;
-
-        var currentText = entryRow.DurationInput.text;
-        var totalSeconds = ParseDurationToSeconds(currentText);
-        var nextTotalSeconds = Mathf.Clamp(totalSeconds + deltaSeconds, 0, 5999);
-        var formatted = FormatSeconds(nextTotalSeconds);
-
-        entryRow.DurationInput.text = formatted;
-        if (index < _workingLoop.entries.Count && _workingLoop.entries[index] != null)
-            _workingLoop.entries[index].durationSeconds = nextTotalSeconds;
-    }
-
-    private void EnsureWorkingData()
-    {
-        _workingPreset = UIManager.CurrentPreset ?? new TimerPreset();
-        UIManager.CurrentPreset = _workingPreset;
-
-        if (_workingPreset.loops == null)
-            _workingPreset.loops = new List<Loop>();
-
-        if (_workingPreset.loops.Count == 0)
-            _workingPreset.loops.Add(new Loop());
-
-        _workingLoop = _workingPreset.loops[0];
-        if (_workingLoop.entries == null)
-            _workingLoop.entries = new List<Entry>();
-
-        if (_workingLoop.entries.Count == 0)
-            _workingLoop.entries.Add(new Entry());
-
-        _workingLoop.repeatCount = Mathf.Clamp(_workingLoop.repeatCount <= 0 ? 1 : _workingLoop.repeatCount, 1, 99);
-        uiHandler.SetInputText("LoopRepeatInput", _workingLoop.repeatCount.ToString());
-    }
-
-    private void SyncUiToWorkingData()
-    {
-        if (_workingPreset == null || _workingLoop == null)
-            return;
-
-        var presetName = uiHandler.GetInputText("PresetNameInput");
-        if (!string.IsNullOrWhiteSpace(presetName))
-            _workingPreset.name = presetName.Trim();
-
-        if (int.TryParse(uiHandler.GetInputText("LoopRepeatInput"), out var repeat))
-            _workingLoop.repeatCount = Mathf.Clamp(repeat, 1, 99);
-
-        var count = Mathf.Min(_workingLoop.entries.Count, _entryUiRows.Count);
-        for (var i = 0; i < count; i++)
-        {
-            var entry = _workingLoop.entries[i] ?? new Entry();
-            var ui = _entryUiRows[i];
-
-            if (ui.NameInput != null)
-            {
-                var name = ui.NameInput.text;
-                entry.name = string.IsNullOrWhiteSpace(name) ? "New Entry" : name.Trim();
-            }
-
-            if (ui.DurationInput != null)
-                entry.durationSeconds = ParseDurationToSeconds(ui.DurationInput.text);
-
-            _workingLoop.entries[i] = entry;
+            ApplyLoopUiData(loopUi, loopIndex, loop);
+            WireLoopButtons(loopUi, loopIndex);
+            RebuildEntryRows(loopUi, loopIndex);
         }
     }
 
-    private void RebuildEntryRows()
+    private void ApplyLoopUiData(LoopUiRefs loopUi, int loopIndex, Loop loop)
     {
-        EnsureWorkingData();
-        CaptureBaseEntryLayout();
+        if (loopUi.LoopNameLabel != null)
+            loopUi.LoopNameLabel.text = $"Loop {loopIndex + 1}";
 
-        ClearDynamicEntryObjects();
-        _entryUiRows.Clear();
+        if (loopUi.RepeatInput != null)
+            loopUi.RepeatInput.text = loop.repeatCount.ToString();
+    }
 
-        var firstRefs = BuildRefsFromExistingRows();
+    private void RebuildEntryRows(LoopUiRefs loopUi, int loopIndex)
+    {
+        CaptureBaseEntryLayout(loopUi);
+        ClearDynamicEntryObjects(loopUi);
+        loopUi.EntryRows.Clear();
+
+        var firstRefs = BuildEntryRefs(loopUi);
         if (firstRefs == null)
             return;
 
-        _entryUiRows.Add(firstRefs);
+        var loop = _workingPreset.loops[loopIndex];
+        if (loop.entries == null)
+            loop.entries = new List<Entry>();
 
-        for (var i = 1; i < _workingLoop.entries.Count; i++)
+        if (loop.entries.Count == 0)
         {
-            var clonedRefs = CloneEntryRows(firstRefs, i);
+            SetEntryRowsActive(firstRefs, false);
+            ApplyEntryLayoutForCount(loopUi, 0);
+            return;
+        }
+
+        SetEntryRowsActive(firstRefs, true);
+        loopUi.EntryRows.Add(firstRefs);
+
+        for (var i = 1; i < loop.entries.Count; i++)
+        {
+            var clonedRefs = CloneEntryRows(loopUi, firstRefs, i);
             if (clonedRefs != null)
-                _entryUiRows.Add(clonedRefs);
+                loopUi.EntryRows.Add(clonedRefs);
         }
 
-        for (var i = 0; i < _entryUiRows.Count; i++)
+        for (var i = 0; i < loopUi.EntryRows.Count; i++)
         {
-            var entry = _workingLoop.entries[i] ?? new Entry();
-            ApplyEntryUiData(i, entry);
-            WireEntryButtons(i);
+            var entry = loop.entries[i] ?? new Entry();
+            ApplyEntryUiData(loopUi.EntryRows[i], entry);
+            WireEntryButtons(loopUi, loopIndex, i);
         }
 
-        ApplyEntryLayoutForCount(_workingLoop.entries.Count);
+        ApplyEntryLayoutForCount(loopUi, loop.entries.Count);
     }
 
-    private void ApplyEntryUiData(int index, Entry entry)
+    private static void SetEntryRowsActive(EntryUiRefs refs, bool active)
     {
-        var ui = _entryUiRows[index];
+        if (refs == null)
+            return;
+
+        if (refs.HeaderRow != null)
+            refs.HeaderRow.SetActive(active);
+        if (refs.NameRow != null)
+            refs.NameRow.SetActive(active);
+        if (refs.DurationHeaderRow != null)
+            refs.DurationHeaderRow.SetActive(active);
+        if (refs.DurationRow != null)
+            refs.DurationRow.SetActive(active);
+        if (refs.ControlsRow != null)
+            refs.ControlsRow.SetActive(active);
+    }
+
+    private void ApplyEntryUiData(EntryUiRefs ui, Entry entry)
+    {
         if (ui.NameInput != null)
             ui.NameInput.text = string.IsNullOrWhiteSpace(entry.name) ? "New Entry" : entry.name;
 
         if (ui.DurationInput != null)
             ui.DurationInput.text = FormatSeconds(Mathf.RoundToInt(Mathf.Max(0f, entry.durationSeconds)));
 
-        // Apply entry color to all entry rows
-        var darkColor = new Color(entry.color.r * 0.5f, entry.color.g * 0.5f, entry.color.b * 0.5f, 1f);
-        ApplyColorToRow(ui.HeaderRow, darkColor);
-        ApplyColorToRow(ui.NameRow, darkColor);
-        ApplyColorToRow(ui.DurationHeaderRow, darkColor);
-        ApplyColorToRow(ui.DurationRow, darkColor);
-        ApplyColorToRow(ui.ControlsRow, darkColor);
-
-        // Apply entry color to color button
         if (ui.ColorButton != null)
         {
             var buttonImage = ui.ColorButton.GetComponent<Image>();
@@ -417,115 +235,184 @@ public class MainMenuHtmlController : MonoBehaviour
         }
     }
 
-    private void ApplyColorToRow(GameObject row, Color color)
+    private void WireLoopButtons(LoopUiRefs loopUi, int loopIndex)
     {
-        if (row == null)
-            return;
+        WireLoopDragTarget(loopUi, loopIndex);
 
-        var image = row.GetComponent<Image>();
-        if (image != null)
-            image.color = color;
+        if (loopUi.RepeatMinusButton != null)
+        {
+            loopUi.RepeatMinusButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
+            loopUi.RepeatMinusButton.onClick.AddListener(() => AdjustRepeat(capturedLoopIndex, -1));
+        }
+
+        if (loopUi.RepeatPlusButton != null)
+        {
+            loopUi.RepeatPlusButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
+            loopUi.RepeatPlusButton.onClick.AddListener(() => AdjustRepeat(capturedLoopIndex, 1));
+        }
+
+        if (loopUi.AddEntryButton != null)
+        {
+            loopUi.AddEntryButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
+            loopUi.AddEntryButton.onClick.AddListener(() => OnAddEntryPressed(capturedLoopIndex));
+        }
     }
 
-    private void WireEntryButtons(int index)
+    private void WireEntryButtons(LoopUiRefs loopUi, int loopIndex, int index)
     {
-        var ui = _entryUiRows[index];
+        var ui = loopUi.EntryRows[index];
+
+        WireEntryDragTargets(ui, loopIndex, index);
 
         if (ui.ColorButton != null)
         {
             ui.ColorButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
-            ui.ColorButton.onClick.AddListener(() => OnColorButtonPressed(capturedIndex));
+            ui.ColorButton.onClick.AddListener(() => OnColorButtonPressed(capturedLoopIndex, capturedIndex));
         }
 
         if (ui.DuplicateButton != null)
         {
             ui.DuplicateButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
-            ui.DuplicateButton.onClick.AddListener(() => OnDuplicateEntryPressed(capturedIndex));
+            ui.DuplicateButton.onClick.AddListener(() => OnDuplicateEntryPressed(capturedLoopIndex, capturedIndex));
         }
 
         if (ui.DeleteButton != null)
         {
             ui.DeleteButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
-            ui.DeleteButton.onClick.AddListener(() => OnDeleteEntryPressed(capturedIndex));
+            ui.DeleteButton.onClick.AddListener(() => OnDeleteEntryPressed(capturedLoopIndex, capturedIndex));
         }
 
         if (ui.DurationMinusButton != null)
         {
             ui.DurationMinusButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
-            ui.DurationMinusButton.onClick.AddListener(() => OnEntryDurationAdjust(capturedIndex, -5));
+            ui.DurationMinusButton.onClick.AddListener(() => OnEntryDurationAdjust(capturedLoopIndex, capturedIndex, -5));
         }
 
         if (ui.DurationPlusButton != null)
         {
             ui.DurationPlusButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
-            ui.DurationPlusButton.onClick.AddListener(() => OnEntryDurationAdjust(capturedIndex, 5));
+            ui.DurationPlusButton.onClick.AddListener(() => OnEntryDurationAdjust(capturedLoopIndex, capturedIndex, 5));
         }
     }
 
-    private void CaptureBaseEntryLayout()
+    private void WireEntryDragTargets(EntryUiRefs ui, int loopIndex, int index)
     {
-        if (_entryLayoutInitialized)
+        if (ui == null)
             return;
 
-        var loopSection = uiHandler.GetElement("LoopSection");
-        var addButtonsRow = uiHandler.GetElement("AddButtonsRow");
-        var entryHeader = uiHandler.GetElement("EntryRowHeader");
-        var entryRow = uiHandler.GetElement("EntryRow1");
-        var durationHeader = uiHandler.GetElement("EntryDurationHeader");
-        var durationRow = uiHandler.GetElement("EntryDurationRow");
-        var controlsRow = uiHandler.GetElement("EntryControlsRow");
+        WireEntryDragSurface(ui.DragHandle, loopIndex, index);
 
-        if (loopSection == null || addButtonsRow == null || entryHeader == null || entryRow == null || durationHeader == null || durationRow == null || controlsRow == null)
-            return;
+        // Keep the drag handle panel interactive, but disable raycasts on its inner lines.
+        if (ui.DragHandle != null)
+        {
+            var images = ui.DragHandle.GetComponentsInChildren<Image>(true);
+            for (var i = 0; i < images.Length; i++)
+            {
+                if (images[i] == null)
+                    continue;
 
-        var loopSectionRt = loopSection.GetComponent<RectTransform>();
-        var loopSectionLe = loopSection.GetComponent<LayoutElement>();
-
-        _baseLoopSectionHeight = loopSectionRt != null ? loopSectionRt.sizeDelta.y : 1430f;
-        _baseLoopSectionPreferredHeight = loopSectionLe != null ? loopSectionLe.preferredHeight : _baseLoopSectionHeight;
-        _baseAddButtonsY = GetAnchoredY(addButtonsRow);
-        _baseEntryRowHeaderY = GetAnchoredY(entryHeader);
-        _baseEntryRowY = GetAnchoredY(entryRow);
-        _baseEntryDurationHeaderY = GetAnchoredY(durationHeader);
-        _baseEntryDurationRowY = GetAnchoredY(durationRow);
-        _baseEntryControlsRowY = GetAnchoredY(controlsRow);
-        _entryBlockYOffset = Mathf.Abs(_baseAddButtonsY - _baseEntryRowHeaderY);
-        if (_entryBlockYOffset <= 0f)
-            _entryBlockYOffset = 538f;
-
-        _entryLayoutInitialized = true;
+                images[i].raycastTarget = images[i].gameObject == ui.DragHandle;
+            }
+        }
     }
 
-    private EntryUiRefs BuildRefsFromExistingRows()
+    private LoopUiRefs BuildLoopUiRefs(GameObject sectionRoot)
+    {
+        if (sectionRoot == null)
+            return null;
+
+        var loopUi = new LoopUiRefs
+        {
+            SectionRoot = sectionRoot,
+            LoopNameLabel = FindDescendantComponent<Text>(sectionRoot, "LoopNameLabel"),
+            LoopDragHandle = FindDescendant(sectionRoot, "LoopDragHandle"),
+            RepeatInput = FindDescendantComponent<InputField>(sectionRoot, "LoopRepeatInput"),
+            RepeatMinusButton = FindDescendantComponent<Button>(sectionRoot, "LoopRepeatMinus"),
+            RepeatPlusButton = FindDescendantComponent<Button>(sectionRoot, "LoopRepeatPlus"),
+            AddEntryButton = FindDescendantComponent<Button>(sectionRoot, "AddEntryBtn"),
+            AddButtonsRow = FindDescendant(sectionRoot, "AddButtonsRow"),
+            EntryHeaderRow = FindDescendant(sectionRoot, "EntryRowHeader"),
+            EntryRowTemplate = FindDescendant(sectionRoot, "EntryRow1"),
+            DurationHeaderRow = FindDescendant(sectionRoot, "EntryDurationHeader"),
+            DurationRowTemplate = FindDescendant(sectionRoot, "EntryDurationRow"),
+            ControlsRowTemplate = FindDescendant(sectionRoot, "EntryControlsRow")
+        };
+
+        return loopUi.EntryRowTemplate == null || loopUi.DurationRowTemplate == null || loopUi.ControlsRowTemplate == null ? null : loopUi;
+    }
+
+    private void CaptureBaseEntryLayout(LoopUiRefs loopUi)
+    {
+        if (loopUi == null)
+            return;
+
+        loopUi.BaseLoopSectionHeight = 872f;
+        loopUi.BaseLoopSectionPreferredHeight = 872f;
+        loopUi.BaseAddButtonsY = -758f;
+        loopUi.BaseEntryRowHeaderY = -360f;
+        loopUi.BaseEntryRowY = -360f;
+        loopUi.BaseEntryDurationHeaderY = -482f;
+        loopUi.BaseEntryDurationRowY = -482f;
+        loopUi.BaseEntryControlsRowY = -604f;
+        loopUi.EntryBlockYOffset = 398f;
+
+        // Restore the template rows to their intended baseline before any cloned rows are positioned.
+        SetAnchoredY(loopUi.EntryHeaderRow, loopUi.BaseEntryRowHeaderY);
+        SetAnchoredY(loopUi.EntryRowTemplate, loopUi.BaseEntryRowY);
+        SetAnchoredY(loopUi.DurationHeaderRow, loopUi.BaseEntryDurationHeaderY);
+        SetAnchoredY(loopUi.DurationRowTemplate, loopUi.BaseEntryDurationRowY);
+        SetAnchoredY(loopUi.ControlsRowTemplate, loopUi.BaseEntryControlsRowY);
+        SetAnchoredY(loopUi.AddButtonsRow, loopUi.BaseAddButtonsY);
+
+        var loopSectionRt = loopUi.SectionRoot != null ? loopUi.SectionRoot.GetComponent<RectTransform>() : null;
+        if (loopSectionRt != null)
+        {
+            var size = loopSectionRt.sizeDelta;
+            size.y = loopUi.BaseLoopSectionHeight;
+            loopSectionRt.sizeDelta = size;
+        }
+
+        var loopSectionLe = loopUi.SectionRoot != null ? loopUi.SectionRoot.GetComponent<LayoutElement>() : null;
+        if (loopSectionLe != null)
+            loopSectionLe.preferredHeight = loopUi.BaseLoopSectionPreferredHeight;
+    }
+
+    private EntryUiRefs BuildEntryRefs(LoopUiRefs loopUi)
     {
         var refs = new EntryUiRefs
         {
-            HeaderRow = uiHandler.GetElement("EntryRowHeader"),
-            NameRow = uiHandler.GetElement("EntryRow1"),
-            DurationHeaderRow = uiHandler.GetElement("EntryDurationHeader"),
-            DurationRow = uiHandler.GetElement("EntryDurationRow"),
-            ControlsRow = uiHandler.GetElement("EntryControlsRow")
+            HeaderRow = loopUi.EntryHeaderRow,
+            NameRow = loopUi.EntryRowTemplate,
+            DurationHeaderRow = loopUi.DurationHeaderRow,
+            DurationRow = loopUi.DurationRowTemplate,
+            ControlsRow = loopUi.ControlsRowTemplate
         };
 
-        if (refs.NameRow == null || refs.DurationRow == null || refs.ControlsRow == null)
-            return null;
-
-        refs.NameInput = refs.NameRow.GetComponentInChildren<InputField>(true);
-        refs.DurationInput = refs.DurationRow.GetComponentInChildren<InputField>(true);
-        refs.DurationMinusButton = FindButtonByName(refs.DurationRow, "Entry1DurationMinus");
-        refs.DurationPlusButton = FindButtonByName(refs.DurationRow, "Entry1DurationPlus");
-        refs.ColorButton = FindButtonByName(refs.ControlsRow, "Entry1Color");
-        refs.DuplicateButton = FindButtonByName(refs.ControlsRow, "Entry1Dup");
-        refs.DeleteButton = FindButtonByName(refs.ControlsRow, "Entry1Delete");
-        return refs;
+        refs.NameInput = refs.NameRow != null ? refs.NameRow.GetComponentInChildren<InputField>(true) : null;
+        refs.DurationInput = refs.DurationRow != null ? refs.DurationRow.GetComponentInChildren<InputField>(true) : null;
+        refs.DurationMinusButton = FindDescendantComponent<Button>(refs.DurationRow, "Entry1DurationMinus");
+        refs.DurationPlusButton = FindDescendantComponent<Button>(refs.DurationRow, "Entry1DurationPlus");
+        refs.ColorButton = FindDescendantComponent<Button>(refs.ControlsRow, "Entry1Color");
+        refs.DuplicateButton = FindDescendantComponent<Button>(refs.ControlsRow, "Entry1Dup");
+        refs.DeleteButton = FindDescendantComponent<Button>(refs.ControlsRow, "Entry1Delete");
+        refs.DragHandle = FindDescendant(refs.NameRow, "Entry1DragHandle");
+        return refs.NameRow == null || refs.DurationRow == null || refs.ControlsRow == null ? null : refs;
     }
 
-    private EntryUiRefs CloneEntryRows(EntryUiRefs template, int index)
+    private EntryUiRefs CloneEntryRows(LoopUiRefs loopUi, EntryUiRefs template, int index)
     {
         var headerClone = InstantiateRowClone(template.HeaderRow, $"EntryRowHeader_{index}");
         var nameClone = InstantiateRowClone(template.NameRow, $"EntryRow1_{index}");
@@ -536,11 +423,11 @@ public class MainMenuHtmlController : MonoBehaviour
         if (headerClone == null || nameClone == null || durationHeaderClone == null || durationClone == null || controlsClone == null)
             return null;
 
-        _dynamicEntryObjects.Add(headerClone);
-        _dynamicEntryObjects.Add(nameClone);
-        _dynamicEntryObjects.Add(durationHeaderClone);
-        _dynamicEntryObjects.Add(durationClone);
-        _dynamicEntryObjects.Add(controlsClone);
+        loopUi.DynamicEntryObjects.Add(headerClone);
+        loopUi.DynamicEntryObjects.Add(nameClone);
+        loopUi.DynamicEntryObjects.Add(durationHeaderClone);
+        loopUi.DynamicEntryObjects.Add(durationClone);
+        loopUi.DynamicEntryObjects.Add(controlsClone);
 
         return new EntryUiRefs
         {
@@ -551,11 +438,12 @@ public class MainMenuHtmlController : MonoBehaviour
             ControlsRow = controlsClone,
             NameInput = nameClone.GetComponentInChildren<InputField>(true),
             DurationInput = durationClone.GetComponentInChildren<InputField>(true),
-            DurationMinusButton = FindButtonByName(durationClone, "Entry1DurationMinus"),
-            DurationPlusButton = FindButtonByName(durationClone, "Entry1DurationPlus"),
-            ColorButton = FindButtonByName(controlsClone, "Entry1Color"),
-            DuplicateButton = FindButtonByName(controlsClone, "Entry1Dup"),
-            DeleteButton = FindButtonByName(controlsClone, "Entry1Delete")
+            DurationMinusButton = FindDescendantComponent<Button>(durationClone, "Entry1DurationMinus"),
+            DurationPlusButton = FindDescendantComponent<Button>(durationClone, "Entry1DurationPlus"),
+            ColorButton = FindDescendantComponent<Button>(controlsClone, "Entry1Color"),
+            DuplicateButton = FindDescendantComponent<Button>(controlsClone, "Entry1Dup"),
+            DeleteButton = FindDescendantComponent<Button>(controlsClone, "Entry1Delete"),
+            DragHandle = FindDescendant(nameClone, "Entry1DragHandle")
         };
     }
 
@@ -569,357 +457,67 @@ public class MainMenuHtmlController : MonoBehaviour
         return clone;
     }
 
-    private static Button FindButtonByName(GameObject root, string buttonName)
+    private static GameObject FindDescendant(GameObject root, string childName)
     {
         if (root == null)
             return null;
 
-        var child = root.transform.Find(buttonName);
-        return child != null ? child.GetComponent<Button>() : null;
+        var transforms = root.GetComponentsInChildren<Transform>(true);
+        for (var i = 0; i < transforms.Length; i++)
+        {
+            if (transforms[i].name == childName)
+                return transforms[i].gameObject;
+        }
+
+        return null;
     }
 
-    private void ApplyEntryLayoutForCount(int count)
+    private static T FindDescendantComponent<T>(GameObject root, string childName) where T : Component
     {
-        var loopSection = uiHandler.GetElement("LoopSection");
-        var addButtonsRow = uiHandler.GetElement("AddButtonsRow");
-        if (loopSection == null || addButtonsRow == null || !_entryLayoutInitialized)
+        var child = FindDescendant(root, childName);
+        return child != null ? child.GetComponent<T>() : null;
+    }
+
+    private GameObject CloneLoopSection(GameObject source, GameObject addLoopPanel, int loopIndex)
+    {
+        if (source == null)
+            return null;
+
+        var clone = Instantiate(source, source.transform.parent);
+        clone.name = $"LoopSection_{loopIndex}";
+        if (addLoopPanel != null)
+            clone.transform.SetSiblingIndex(addLoopPanel.transform.GetSiblingIndex());
+
+        _dynamicLoopObjects.Add(clone);
+        return clone;
+    }
+
+    private void ClearDynamicLoopUi()
+    {
+        for (var i = 0; i < _loopUiSections.Count; i++)
+            ClearDynamicEntryObjects(_loopUiSections[i]);
+
+        for (var i = 0; i < _dynamicLoopObjects.Count; i++)
+        {
+            if (_dynamicLoopObjects[i] != null)
+                Destroy(_dynamicLoopObjects[i]);
+        }
+
+        _dynamicLoopObjects.Clear();
+    }
+
+    private static void ClearDynamicEntryObjects(LoopUiRefs loopUi)
+    {
+        if (loopUi == null)
             return;
 
-        var extra = Mathf.Max(0, count - 1);
-
-        for (var i = 0; i < _entryUiRows.Count; i++)
+        for (var i = 0; i < loopUi.DynamicEntryObjects.Count; i++)
         {
-            var offset = _entryBlockYOffset * i;
-            SetAnchoredY(_entryUiRows[i].HeaderRow, _baseEntryRowHeaderY - offset);
-            SetAnchoredY(_entryUiRows[i].NameRow, _baseEntryRowY - offset);
-            SetAnchoredY(_entryUiRows[i].DurationHeaderRow, _baseEntryDurationHeaderY - offset);
-            SetAnchoredY(_entryUiRows[i].DurationRow, _baseEntryDurationRowY - offset);
-            SetAnchoredY(_entryUiRows[i].ControlsRow, _baseEntryControlsRowY - offset);
+            if (loopUi.DynamicEntryObjects[i] != null)
+                Destroy(loopUi.DynamicEntryObjects[i]);
         }
 
-        SetAnchoredY(addButtonsRow, _baseAddButtonsY - _entryBlockYOffset * extra);
-
-        var loopSectionRt = loopSection.GetComponent<RectTransform>();
-        if (loopSectionRt != null)
-        {
-            var size = loopSectionRt.sizeDelta;
-            size.y = _baseLoopSectionHeight + _entryBlockYOffset * extra;
-            loopSectionRt.sizeDelta = size;
-        }
-
-        var loopSectionLe = loopSection.GetComponent<LayoutElement>();
-        if (loopSectionLe != null)
-            loopSectionLe.preferredHeight = _baseLoopSectionPreferredHeight + _entryBlockYOffset * extra;
+        loopUi.DynamicEntryObjects.Clear();
     }
 
-    private static float GetAnchoredY(GameObject go)
-    {
-        var rt = go != null ? go.GetComponent<RectTransform>() : null;
-        return rt != null ? rt.anchoredPosition.y : 0f;
-    }
-
-    private static void SetAnchoredY(GameObject go, float y)
-    {
-        var rt = go != null ? go.GetComponent<RectTransform>() : null;
-        if (rt == null)
-            return;
-
-        var pos = rt.anchoredPosition;
-        pos.y = y;
-        rt.anchoredPosition = pos;
-    }
-
-    private void ClearDynamicEntryObjects()
-    {
-        for (var i = 0; i < _dynamicEntryObjects.Count; i++)
-        {
-            if (_dynamicEntryObjects[i] != null)
-                Destroy(_dynamicEntryObjects[i]);
-        }
-
-        _dynamicEntryObjects.Clear();
-    }
-
-    private void OnColorButtonPressed(int index)
-    {
-        if (index < 0 || index >= _entryUiRows.Count)
-            return;
-
-        _selectedEntryForColorPicker = index;
-        ShowColorPicker();
-    }
-
-    private void ShowColorPicker()
-    {
-        var colorPickerPanel = uiHandler.GetElement("ColorPickerPanel");
-        if (colorPickerPanel != null)
-        {
-            colorPickerPanel.SetActive(true);
-        }
-
-        // Wire up the color picker buttons
-        WireColorPickerButtons();
-    }
-
-    private void HideColorPicker()
-    {
-        var colorPickerPanel = uiHandler.GetElement("ColorPickerPanel");
-        if (colorPickerPanel != null)
-        {
-            colorPickerPanel.SetActive(false);
-        }
-    }
-
-    private void WireColorPickerButtons()
-    {
-        var colorNames = new[] 
-        { 
-            "Red", "Crimson", "Rose", "HotPink", "Magenta", "Coral",
-            "Blue", "SkyBlue", "Cyan", "Purple", "Indigo", "Violet",
-            "Green", "Mint", "Emerald", "Yellow", "Gold", "Orange"
-        };
-        
-        foreach (var colorName in colorNames)
-        {
-            var buttonId = $"ColorPicker_{colorName}";
-            var button = GetButton(buttonId);
-            if (button != null)
-            {
-                button.onClick.RemoveAllListeners();
-                var capturedColor = colorName;
-                button.onClick.AddListener(() => OnColorSelected(capturedColor));
-            }
-        }
-    }
-
-    private void OnColorSelected(string colorName)
-    {
-        if (_selectedEntryForColorPicker < 0 || _selectedEntryForColorPicker >= _entryUiRows.Count)
-            return;
-
-        if (!ColorMap.TryGetValue(colorName, out var selectedColor))
-            selectedColor = Color.white;
-
-        // Update the model
-        if (_selectedEntryForColorPicker < _workingLoop.entries.Count)
-        {
-            var entry = _workingLoop.entries[_selectedEntryForColorPicker];
-            if (entry != null)
-                entry.color = selectedColor;
-        }
-
-        // Update the UI - apply color to all entry rows
-        var entryRefs = _entryUiRows[_selectedEntryForColorPicker];
-        var darkColor = new Color(selectedColor.r * 0.5f, selectedColor.g * 0.5f, selectedColor.b * 0.5f, 1f);
-        
-        ApplyColorToRow(entryRefs.HeaderRow, darkColor);
-        ApplyColorToRow(entryRefs.NameRow, darkColor);
-        ApplyColorToRow(entryRefs.DurationHeaderRow, darkColor);
-        ApplyColorToRow(entryRefs.DurationRow, darkColor);
-        ApplyColorToRow(entryRefs.ControlsRow, darkColor);
-
-        // Update the color button itself
-        if (entryRefs.ColorButton != null)
-        {
-            var buttonImage = entryRefs.ColorButton.GetComponent<Image>();
-            if (buttonImage != null)
-                buttonImage.color = selectedColor;
-        }
-
-        HideColorPicker();
-    }
-
-    private static int ParseDurationToSeconds(string duration)
-    {
-        if (string.IsNullOrWhiteSpace(duration))
-            return 0;
-
-        var parts = duration.Split(':');
-        if (parts.Length == 2)
-        {
-            var minutes = 0;
-            var seconds = 0;
-
-            int.TryParse(parts[0], out minutes);
-            int.TryParse(parts[1], out seconds);
-
-            minutes = Mathf.Clamp(minutes, 0, 99);
-            seconds = Mathf.Clamp(seconds, 0, 59);
-            return minutes * 60 + seconds;
-        }
-
-        if (int.TryParse(duration, out var rawSeconds))
-            return Mathf.Clamp(rawSeconds, 0, 5999);
-
-        return 0;
-    }
-
-    private static string FormatSeconds(int totalSeconds)
-    {
-        totalSeconds = Mathf.Clamp(totalSeconds, 0, 5999);
-        var minutes = totalSeconds / 60;
-        var seconds = totalSeconds % 60;
-        return $"{minutes:00}:{seconds:00}";
-    }
-
-    private void LoadAndRefresh()
-    {
-        _presets = SaveLoadManager.LoadTimerPresets();
-        RefreshPresetList();
-    }
-
-    private void RefreshPresetList()
-    {
-        var contentGo = uiHandler.GetElement("PresetList_Content");
-        if (contentGo != null)
-        {
-            foreach (Transform child in contentGo.transform)
-                Destroy(child.gameObject);
-        }
-
-        uiHandler.SetVisible("EmptyHint", _presets == null || _presets.Count == 0);
-
-        if (contentGo == null || _presets == null)
-            return;
-
-        var contentRt = contentGo.GetComponent<RectTransform>();
-        foreach (var preset in _presets)
-        {
-            if (preset == null)
-                continue;
-
-            BuildPresetRow(contentRt, preset);
-        }
-    }
-
-    private void BuildPresetRow(RectTransform parent, TimerPreset preset)
-    {
-        var rowGo = new GameObject($"Row_{preset.id}",
-            typeof(RectTransform), typeof(Image), typeof(HorizontalLayoutGroup), typeof(LayoutElement));
-        rowGo.transform.SetParent(parent, false);
-
-        var le = rowGo.GetComponent<LayoutElement>();
-        le.preferredHeight = 240f;
-
-        rowGo.GetComponent<Image>().color = new Color(0.13f, 0.13f, 0.26f, 1f);
-
-        var hlg = rowGo.GetComponent<HorizontalLayoutGroup>();
-        hlg.padding = new RectOffset(30, 24, 24, 24);
-        hlg.spacing = 20f;
-        hlg.childAlignment = TextAnchor.MiddleLeft;
-        hlg.childControlHeight = true;
-        hlg.childControlWidth = false;
-        hlg.childForceExpandHeight = true;
-        hlg.childForceExpandWidth = false;
-
-        var nameGo = new GameObject("Name", typeof(RectTransform), typeof(Text), typeof(LayoutElement));
-        nameGo.transform.SetParent(rowGo.transform, false);
-        nameGo.GetComponent<LayoutElement>().flexibleWidth = 1f;
-
-        var nameText = nameGo.GetComponent<Text>();
-        nameText.font = _font;
-        nameText.text = preset.name ?? "Unnamed";
-        nameText.fontSize = 84;
-        nameText.color = Color.white;
-        nameText.alignment = TextAnchor.MiddleLeft;
-        nameText.horizontalOverflow = HorizontalWrapMode.Wrap;
-        nameText.verticalOverflow = VerticalWrapMode.Truncate;
-        nameText.raycastTarget = false;
-
-        var captured = preset;
-        var startBtn = BuildRowButton(rowGo.transform, "▶  Start", new Color(0.10f, 0.56f, 0.22f), 320f);
-        startBtn.onClick.AddListener(() => AppEvents.Publish("preset.start", new AppEventArg(captured)));
-
-        var deleteBtn = BuildRowButton(rowGo.transform, "Delete", new Color(0.65f, 0.14f, 0.14f), 280f);
-        deleteBtn.onClick.AddListener(() => AppEvents.Publish("preset.delete", new AppEventArg(captured)));
-    }
-
-    private Button BuildRowButton(Transform parent, string label, Color color, float width)
-    {
-        var go = new GameObject(label,
-            typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
-        go.transform.SetParent(parent, false);
-
-        var layoutElement = go.GetComponent<LayoutElement>();
-        layoutElement.preferredWidth = width;
-        layoutElement.preferredHeight = 160f;
-        go.GetComponent<Image>().color = color;
-
-        var labelGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
-        var labelRt = labelGo.GetComponent<RectTransform>();
-        labelRt.SetParent(go.transform, false);
-        labelRt.anchorMin = Vector2.zero;
-        labelRt.anchorMax = Vector2.one;
-        labelRt.offsetMin = Vector2.zero;
-        labelRt.offsetMax = Vector2.zero;
-
-        var txt = labelGo.GetComponent<Text>();
-        txt.font = _font;
-        txt.text = label;
-        txt.fontSize = 72;
-        txt.resizeTextForBestFit = true;
-        txt.resizeTextMinSize = 40;
-        txt.resizeTextMaxSize = 72;
-        txt.color = Color.white;
-        txt.alignment = TextAnchor.MiddleCenter;
-        txt.raycastTarget = false;
-
-        return go.GetComponent<Button>();
-    }
-
-    private void OnAddPreset(AppEventArg _)
-    {
-        var newPreset = new TimerPreset { name = "New Timer" };
-        NavigateToTimerCreation(newPreset);
-    }
-
-    private void OnStartPreset(AppEventArg arg)
-    {
-        if (!(arg?.Payload is TimerPreset preset))
-            return;
-
-        NavigateToTimerCreation(preset);
-    }
-
-    private void OnDeletePreset(AppEventArg arg)
-    {
-        if (!(arg?.Payload is TimerPreset preset))
-            return;
-
-        if (_presets == null)
-            _presets = SaveLoadManager.LoadTimerPresets();
-
-        _presets.Remove(preset);
-        SaveLoadManager.SaveTimerPresets(_presets);
-        RefreshPresetList();
-    }
-
-    private void OnCreationBack(AppEventArg _)
-    {
-        SyncUiToWorkingData();
-        GoBackToMainMenu();
-    }
-
-    private void GoBackToMainMenu()
-    {
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.LoadMainMenu();
-            return;
-        }
-
-        SceneManager.LoadScene(MainMenuSceneName);
-    }
-
-    private static void NavigateToTimerCreation(TimerPreset preset)
-    {
-        if (UIManager.Instance != null)
-        {
-            UIManager.Instance.LoadTimerCreationScene(preset);
-            return;
-        }
-
-        UIManager.CurrentPreset = preset;
-        SceneManager.LoadScene(TimerCreationSceneName);
-    }
 }
