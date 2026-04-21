@@ -128,16 +128,17 @@ public partial class MainMenuHtmlController
         MoveLoopUiRefs(fromIndex, toIndex);
         ApplyLoopSectionSiblingOrder();
 
-        var step = GetLoopDragStep(fromIndex);
-        _loopDragStartPointerY -= (toIndex - fromIndex) * step;
+        // Reset drag baseline after each swap to avoid oscillation between neighbors.
+        _loopDragStartPointerY = pointerY;
         _loopDragLastPointerY = pointerY;
         _lastLoopSwapDirection = Math.Sign(toIndex - fromIndex);
         _loopDragCurrentIndex = toIndex;
         _loopDragBaseSectionY = GetAnchoredY(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
-        _nextLoopSwapAllowedTime = Time.unscaledTime + 0.08f;
+        _nextLoopSwapAllowedTime = Time.unscaledTime + 0.12f;
 
         var dragDeltaY = _loopDragLastPointerY - _loopDragStartPointerY;
         ApplyDraggedLoopOffset(_loopDragCurrentIndex, dragDeltaY);
+        BringLoopSectionInFrontOfAddLoop(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
     }
 
     private int CalculateLoopTargetIndex(float pointerY)
@@ -146,7 +147,7 @@ public partial class MainMenuHtmlController
             return _loopDragCurrentIndex;
 
         var deltaY = pointerY - _loopDragStartPointerY;
-        var swapThreshold = Mathf.Clamp(GetLoopDragStep(_loopDragCurrentIndex) * 0.35f, 96f, 220f);
+        var swapThreshold = Mathf.Clamp(GetLoopDragStep(_loopDragCurrentIndex) * 0.42f, 120f, 260f);
 
         var direction = 0; // +1 => move down, -1 => move up
         if (deltaY <= -swapThreshold)
@@ -159,7 +160,7 @@ public partial class MainMenuHtmlController
 
         if (_lastLoopSwapDirection != 0 && direction != _lastLoopSwapDirection)
         {
-            var reverseThreshold = swapThreshold * 1.45f;
+            var reverseThreshold = swapThreshold * 1.75f;
             if (Mathf.Abs(deltaY) < reverseThreshold)
                 return _loopDragCurrentIndex;
         }
@@ -235,6 +236,9 @@ public partial class MainMenuHtmlController
             if (sectionRoot != null)
                 sectionRoot.transform.SetSiblingIndex(firstLoopIndex + i);
         }
+
+        if (_isDraggingLoop && _loopDragCurrentIndex >= 0 && _loopDragCurrentIndex < _loopUiSections.Count)
+            BringLoopSectionInFrontOfAddLoop(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
 
         addLoopPanel.transform.SetAsLastSibling();
     }
