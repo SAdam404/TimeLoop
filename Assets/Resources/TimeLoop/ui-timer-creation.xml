@@ -37,6 +37,17 @@
               align="middle-left"
               color="#F4F6FFFF"/>
 
+          <text id="PresetTotalDurationLabel"
+            anchor="top-right"
+            x="-16"
+            y="-22"
+            width="220"
+            height="42"
+            value="00:00"
+            fontSize="44"
+            align="middle-right"
+            color="#C7D1F7FF"/>
+
         <text id="NameLabel"
               anchor="top-left"
               x="16"
@@ -77,6 +88,17 @@
               fontSize="68"
               align="middle-left"
               color="#F4F6FFFF"/>
+
+          <text id="LoopTotalDurationLabel"
+            anchor="top-right"
+            x="-16"
+            y="-22"
+            width="220"
+            height="42"
+            value="00:00"
+            fontSize="44"
+            align="middle-right"
+            color="#C7D1F7FF"/>
 
         <row id="LoopHeaderRow"
              anchor="top-center"
@@ -233,7 +255,7 @@
               x="-20"
               width="340"
               height="92"
-              text="Save (Soon)"
+              text="Save"
               buttonFontSize="40"
               icon="TimeLoop/Icons/ic_timer"
               iconSize="36"

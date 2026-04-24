@@ -9,7 +9,7 @@
            background="#1A1A30FF">
       <text id="AppTitle"
             anchor="middle-center"
-            value="TimeLoop"
+            value="ActivityTimer"
             widthPercent="0.95"
             height="150"
             align="middle-center"

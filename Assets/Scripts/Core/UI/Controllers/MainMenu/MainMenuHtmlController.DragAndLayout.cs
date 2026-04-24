@@ -70,7 +70,7 @@ public partial class MainMenuHtmlController
         _lastLoopSwapDirection = 0;
 
         SetCreationScrollEnabled(false);
-        BringLoopSectionInFrontOfAddLoop(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
+        BeginLoopDragVisual(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
     }
 
     private void OnLoopDragMove(PointerEventData eventData)
@@ -82,9 +82,6 @@ public partial class MainMenuHtmlController
         var dragDeltaY = _loopDragLastPointerY - _loopDragStartPointerY;
         ApplyDraggedLoopOffset(_loopDragCurrentIndex, dragDeltaY);
         TryReorderLoopDuringDrag(_loopDragLastPointerY);
-
-        if (_loopDragCurrentIndex >= 0 && _loopDragCurrentIndex < _loopUiSections.Count)
-            BringLoopSectionInFrontOfAddLoop(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
     }
 
     private void OnLoopDragEnd(PointerEventData eventData)
@@ -98,6 +95,9 @@ public partial class MainMenuHtmlController
 
     private void EndLoopDrag()
     {
+        if (_loopDragCurrentIndex >= 0 && _loopDragCurrentIndex < _loopUiSections.Count)
+            ApplyDraggedLoopOffset(_loopDragCurrentIndex, 0f);
+
         _isDraggingLoop = false;
         _loopDragCurrentIndex = -1;
         _loopDragStartPointerY = 0f;
@@ -106,6 +106,7 @@ public partial class MainMenuHtmlController
         _nextLoopSwapAllowedTime = 0f;
         _lastLoopSwapDirection = 0;
         _entryDragSpace = null;
+        EndLoopDragVisual();
 
         SetCreationScrollEnabled(true);
         RebuildLoopSections();
@@ -138,7 +139,6 @@ public partial class MainMenuHtmlController
 
         var dragDeltaY = _loopDragLastPointerY - _loopDragStartPointerY;
         ApplyDraggedLoopOffset(_loopDragCurrentIndex, dragDeltaY);
-        BringLoopSectionInFrontOfAddLoop(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
     }
 
     private int CalculateLoopTargetIndex(float pointerY)
@@ -237,10 +237,84 @@ public partial class MainMenuHtmlController
                 sectionRoot.transform.SetSiblingIndex(firstLoopIndex + i);
         }
 
-        if (_isDraggingLoop && _loopDragCurrentIndex >= 0 && _loopDragCurrentIndex < _loopUiSections.Count)
-            BringLoopSectionInFrontOfAddLoop(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
-
         addLoopPanel.transform.SetAsLastSibling();
+    }
+
+    private void BeginLoopDragVisual(GameObject sectionRoot)
+    {
+        EndLoopDragVisual();
+
+        if (sectionRoot == null)
+            return;
+
+        _activeLoopDragCanvas = sectionRoot.GetComponent<Canvas>();
+        if (_activeLoopDragCanvas == null)
+        {
+            _activeLoopDragCanvas = sectionRoot.AddComponent<Canvas>();
+            _activeLoopDragCanvasAdded = true;
+        }
+        else
+        {
+            _activeLoopDragCanvasAdded = false;
+        }
+
+        _activeLoopDragCanvasOriginalOverride = _activeLoopDragCanvas.overrideSorting;
+        _activeLoopDragCanvasOriginalOrder = _activeLoopDragCanvas.sortingOrder;
+        _activeLoopDragCanvas.overrideSorting = true;
+        _activeLoopDragCanvas.sortingOrder = 500;
+
+        _activeLoopDragCanvasGroup = sectionRoot.GetComponent<CanvasGroup>();
+        if (_activeLoopDragCanvasGroup == null)
+        {
+            _activeLoopDragCanvasGroup = sectionRoot.AddComponent<CanvasGroup>();
+            _activeLoopDragCanvasGroupAdded = true;
+            _activeLoopDragCanvasGroupOriginalAlpha = 1f;
+        }
+        else
+        {
+            _activeLoopDragCanvasGroupAdded = false;
+            _activeLoopDragCanvasGroupOriginalAlpha = _activeLoopDragCanvasGroup.alpha;
+        }
+
+        // Keep underlying loops visible while dragging a full loop block.
+        _activeLoopDragCanvasGroup.alpha = 0.86f;
+    }
+
+    private void EndLoopDragVisual()
+    {
+        if (_activeLoopDragCanvasGroup != null)
+        {
+            if (_activeLoopDragCanvasGroupAdded)
+            {
+                Destroy(_activeLoopDragCanvasGroup);
+            }
+            else
+            {
+                _activeLoopDragCanvasGroup.alpha = _activeLoopDragCanvasGroupOriginalAlpha;
+            }
+
+            _activeLoopDragCanvasGroup = null;
+            _activeLoopDragCanvasGroupAdded = false;
+            _activeLoopDragCanvasGroupOriginalAlpha = 1f;
+        }
+
+        if (_activeLoopDragCanvas == null)
+            return;
+
+        if (_activeLoopDragCanvasAdded)
+        {
+            Destroy(_activeLoopDragCanvas);
+        }
+        else
+        {
+            _activeLoopDragCanvas.overrideSorting = _activeLoopDragCanvasOriginalOverride;
+            _activeLoopDragCanvas.sortingOrder = _activeLoopDragCanvasOriginalOrder;
+        }
+
+        _activeLoopDragCanvas = null;
+        _activeLoopDragCanvasAdded = false;
+        _activeLoopDragCanvasOriginalOverride = false;
+        _activeLoopDragCanvasOriginalOrder = 0;
     }
 
     private void OnEntryDragBegin(int loopIndex, int index, PointerEventData eventData)
@@ -279,6 +353,7 @@ public partial class MainMenuHtmlController
         _previewLoopIndex = -1;
         _previewInsertIndex = -1;
         SetCreationScrollEnabled(false);
+        BeginLoopDragVisual(_loopUiSections[loopIndex].SectionRoot);
         BringDraggedEntryToFront(loopIndex, index);
     }
 
@@ -421,6 +496,7 @@ public partial class MainMenuHtmlController
         _entryDragSpace = null;
         _lastSwapDirection = 0;
         _nextSwapAllowedTime = 0f;
+        EndLoopDragVisual();
         SetCreationScrollEnabled(true);
 
         SyncUiToWorkingData();
@@ -598,10 +674,6 @@ public partial class MainMenuHtmlController
     {
         if (loopIndex < 0 || loopIndex >= _loopUiSections.Count)
             return;
-
-        var sectionRoot = _loopUiSections[loopIndex].SectionRoot;
-        if (sectionRoot != null)
-            BringLoopSectionInFrontOfAddLoop(sectionRoot);
 
         var entryRows = _loopUiSections[loopIndex].EntryRows;
         if (entryIndex < 0 || entryIndex >= entryRows.Count)

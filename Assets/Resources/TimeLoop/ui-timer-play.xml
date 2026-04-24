@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui>
+  <panel id="Root" stretch="true" background="#0F0F1EFF">
+
+    <panel id="TopBar" anchor="top-center" widthPercent="1" height="160" y="0" background="#1A1A30FF">
+      <button id="PrevEntryBtn"
+              anchor="middle-left"
+              x="16"
+              width="120"
+              height="100"
+              text="&lt;"
+              buttonFontSize="64"
+              buttonColor="#30365AFF"
+              textColor="#FFFFFFFF"/>
+
+      <button id="ExitHoldBtn"
+              anchor="middle-center"
+              width="420"
+              height="100"
+              text="Hold to exit"
+              buttonFontSize="44"
+              buttonColor="#5A3040FF"
+              textColor="#FFFFFFFF"/>
+
+      <button id="NextEntryBtn"
+              anchor="middle-right"
+              x="-16"
+              width="120"
+              height="100"
+              text="&gt;"
+              buttonFontSize="64"
+              buttonColor="#30365AFF"
+              textColor="#FFFFFFFF"/>
+    </panel>
+
+    <panel id="PlayCenterPanel"
+           stretch="true"
+           top="176"
+           bottom="170"
+           left="12"
+           right="12"
+           background="#223255FF">
+
+      <text id="PlayCountdownLabel"
+            anchor="middle-center"
+            y="-70"
+            widthPercent="0.92"
+            height="180"
+            value="00:00"
+            fontSize="148"
+            align="middle-center"
+            color="#FFFFFFFF"/>
+
+      <text id="PlayEntryNameLabel"
+            anchor="middle-center"
+            y="54"
+            widthPercent="0.92"
+            height="120"
+            value="Entry"
+            fontSize="72"
+            align="middle-center"
+            color="#F2F4FFFF"/>
+    </panel>
+
+    <panel id="BottomBar" anchor="bottom-center" widthPercent="1" height="154" y="0" background="#1A1A30FF">
+      <button id="PauseResumeBtn"
+              anchor="middle-right"
+              x="-16"
+              width="260"
+              height="94"
+              text="Pause"
+              buttonFontSize="44"
+              buttonColor="#3563D8FF"
+              textColor="#FFFFFFFF"/>
+    </panel>
+  </panel>
+</ui>

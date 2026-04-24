@@ -46,6 +46,13 @@ public partial class MainMenuHtmlController : MonoBehaviour
     private bool _isDraggingLoop;
     private float _nextLoopSwapAllowedTime;
     private int _lastLoopSwapDirection;
+    private Canvas _activeLoopDragCanvas;
+    private bool _activeLoopDragCanvasAdded;
+    private bool _activeLoopDragCanvasOriginalOverride;
+    private int _activeLoopDragCanvasOriginalOrder;
+    private CanvasGroup _activeLoopDragCanvasGroup;
+    private bool _activeLoopDragCanvasGroupAdded;
+    private float _activeLoopDragCanvasGroupOriginalAlpha;
 
     // Color picker colors
     private static readonly Dictionary<string, Color> ColorMap = new Dictionary<string, Color>
@@ -77,6 +84,7 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
     private int _selectedLoopForColorPicker = -1;
     private int _selectedEntryForColorPicker = -1;
+    private Text _presetTotalDurationLabel;
 
     private void Awake()
     {
@@ -150,12 +158,17 @@ public partial class MainMenuHtmlController : MonoBehaviour
             WireLoopButtons(loopUi, loopIndex);
             RebuildEntryRows(loopUi, loopIndex);
         }
+
+        UpdatePresetTotalDurationLabel();
     }
 
     private void ApplyLoopUiData(LoopUiRefs loopUi, int loopIndex, Loop loop)
     {
         if (loopUi.LoopNameLabel != null)
             loopUi.LoopNameLabel.text = $"Loop {loopIndex + 1}";
+
+        if (loopUi.LoopTotalDurationLabel != null)
+            loopUi.LoopTotalDurationLabel.text = GetLoopDurationText(loop);
 
         if (loopUi.RepeatInput != null)
             loopUi.RepeatInput.text = loop.repeatCount.ToString();
@@ -338,6 +351,7 @@ public partial class MainMenuHtmlController : MonoBehaviour
         {
             SectionRoot = sectionRoot,
             LoopNameLabel = FindDescendantComponent<Text>(sectionRoot, "LoopNameLabel"),
+            LoopTotalDurationLabel = FindDescendantComponent<Text>(sectionRoot, "LoopTotalDurationLabel"),
             LoopDragHandle = FindDescendant(sectionRoot, "LoopDragHandle"),
             RepeatInput = FindDescendantComponent<InputField>(sectionRoot, "LoopRepeatInput"),
             RepeatMinusButton = FindDescendantComponent<Button>(sectionRoot, "LoopRepeatMinus"),

@@ -29,5 +29,11 @@ public class UIManager : MonoBehaviour
         SceneManager.LoadScene("MainMenuScene");
     }
 
+    public void LoadTimerPlayScene(TimerPreset preset)
+    {
+        CurrentPreset = preset;
+        SceneManager.LoadScene("TimerPlayScene");
+    }
+
     public static TimerPreset CurrentPreset;
 }

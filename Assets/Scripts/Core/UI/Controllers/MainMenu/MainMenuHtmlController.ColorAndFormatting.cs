@@ -138,4 +138,12 @@ public partial class MainMenuHtmlController
         var seconds = totalSeconds % 60;
         return $"{minutes:00}:{seconds:00}";
     }
+
+    private static string FormatLongSeconds(int totalSeconds)
+    {
+        totalSeconds = Mathf.Max(0, totalSeconds);
+        var minutes = totalSeconds / 60;
+        var seconds = totalSeconds % 60;
+        return $"{minutes:00}:{seconds:00}";
+    }
 }

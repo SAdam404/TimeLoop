@@ -26,6 +26,8 @@ public partial class MainMenuHtmlController
 
         if (_loopUiSections[loopIndex].RepeatInput != null)
             _loopUiSections[loopIndex].RepeatInput.text = nextValue.ToString();
+
+        UpdateLoopAndPresetDurationLabels(loopIndex);
     }
 
     private void OnAddLoopPressed()
@@ -135,6 +137,8 @@ public partial class MainMenuHtmlController
         entryRow.DurationInput.text = formatted;
         if (index < loop.entries.Count && loop.entries[index] != null)
             loop.entries[index].durationSeconds = nextTotalSeconds;
+
+        UpdateLoopAndPresetDurationLabels(loopIndex);
     }
 
     private void EnsureWorkingData()
@@ -200,5 +204,147 @@ public partial class MainMenuHtmlController
                 loop.entries[entryIndex] = entry;
             }
         }
+    }
+
+    private void OnSavePresetPressed()
+    {
+        EnsureWorkingData();
+        SyncUiToWorkingData();
+
+        if (string.IsNullOrWhiteSpace(_workingPreset.name))
+            _workingPreset.name = "New Timer";
+
+        var presets = SaveLoadManager.LoadTimerPresets() ?? new List<TimerPreset>();
+        var savedPreset = ClonePreset(_workingPreset);
+
+        var existingIndex = -1;
+        for (var i = 0; i < presets.Count; i++)
+        {
+            if (presets[i] != null && presets[i].id == savedPreset.id)
+            {
+                existingIndex = i;
+                break;
+            }
+        }
+
+        if (existingIndex >= 0)
+            presets[existingIndex] = savedPreset;
+        else
+            presets.Add(savedPreset);
+
+        SaveLoadManager.SaveTimerPresets(presets);
+        _presets = presets;
+        UIManager.CurrentPreset = savedPreset;
+
+        GoBackToMainMenu();
+    }
+
+    private static string GetLoopDurationText(Loop loop)
+    {
+        if (loop == null)
+            return "00:00";
+
+        return FormatLongSeconds(CalculateLoopTotalSeconds(loop));
+    }
+
+    private static int CalculateLoopTotalSeconds(Loop loop)
+    {
+        if (loop == null || loop.entries == null)
+            return 0;
+
+        var sum = 0;
+        for (var i = 0; i < loop.entries.Count; i++)
+        {
+            var entry = loop.entries[i];
+            if (entry == null)
+                continue;
+
+            sum += Mathf.RoundToInt(Mathf.Max(0f, entry.durationSeconds));
+        }
+
+        var repeat = Mathf.Clamp(loop.repeatCount <= 0 ? 1 : loop.repeatCount, 1, 99);
+        return Mathf.Max(0, sum * repeat);
+    }
+
+    private static TimerPreset ClonePreset(TimerPreset source)
+    {
+        var clone = new TimerPreset
+        {
+            id = string.IsNullOrWhiteSpace(source?.id) ? System.Guid.NewGuid().ToString("N") : source.id,
+            name = string.IsNullOrWhiteSpace(source?.name) ? "New Timer" : source.name,
+            loops = new List<Loop>()
+        };
+
+        if (source == null || source.loops == null)
+            return clone;
+
+        for (var i = 0; i < source.loops.Count; i++)
+        {
+            var sourceLoop = source.loops[i] ?? new Loop();
+            var loopClone = new Loop
+            {
+                repeatCount = Mathf.Clamp(sourceLoop.repeatCount <= 0 ? 1 : sourceLoop.repeatCount, 1, 99),
+                entries = new List<Entry>()
+            };
+
+            if (sourceLoop.entries != null)
+            {
+                for (var j = 0; j < sourceLoop.entries.Count; j++)
+                {
+                    var sourceEntry = sourceLoop.entries[j] ?? new Entry();
+                    loopClone.entries.Add(new Entry
+                    {
+                        name = string.IsNullOrWhiteSpace(sourceEntry.name) ? "New Entry" : sourceEntry.name,
+                        durationSeconds = Mathf.Max(0f, sourceEntry.durationSeconds),
+                        color = sourceEntry.color
+                    });
+                }
+            }
+
+            clone.loops.Add(loopClone);
+        }
+
+        return clone;
+    }
+
+    private static int CalculatePresetTotalSeconds(TimerPreset preset)
+    {
+        if (preset == null || preset.loops == null)
+            return 0;
+
+        var sum = 0;
+        for (var i = 0; i < preset.loops.Count; i++)
+        {
+            var loop = preset.loops[i];
+            sum += CalculateLoopTotalSeconds(loop);
+        }
+
+        return Mathf.Max(0, sum);
+    }
+
+    private void UpdateLoopAndPresetDurationLabels(int loopIndex)
+    {
+        if (loopIndex >= 0 && loopIndex < _workingPreset.loops.Count && loopIndex < _loopUiSections.Count)
+        {
+            var loopUi = _loopUiSections[loopIndex];
+            if (loopUi != null && loopUi.LoopTotalDurationLabel != null)
+                loopUi.LoopTotalDurationLabel.text = GetLoopDurationText(_workingPreset.loops[loopIndex]);
+        }
+
+        UpdatePresetTotalDurationLabel();
+    }
+
+    private void UpdatePresetTotalDurationLabel()
+    {
+        if (_presetTotalDurationLabel == null)
+        {
+            var labelGo = uiHandler != null ? uiHandler.GetElement("PresetTotalDurationLabel") : null;
+            _presetTotalDurationLabel = labelGo != null ? labelGo.GetComponent<Text>() : null;
+        }
+
+        if (_presetTotalDurationLabel == null)
+            return;
+
+        _presetTotalDurationLabel.text = FormatLongSeconds(CalculatePresetTotalSeconds(_workingPreset));
     }
 }

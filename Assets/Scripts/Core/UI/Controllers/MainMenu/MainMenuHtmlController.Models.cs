@@ -9,6 +9,7 @@ public partial class MainMenuHtmlController
     {
         public GameObject SectionRoot;
         public Text LoopNameLabel;
+        public Text LoopTotalDurationLabel;
         public GameObject LoopDragHandle;
         public InputField RepeatInput;
         public Button RepeatMinusButton;
