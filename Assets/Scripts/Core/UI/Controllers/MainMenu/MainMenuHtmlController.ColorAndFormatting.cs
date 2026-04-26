@@ -96,9 +96,7 @@ public partial class MainMenuHtmlController
         var entryRefs = entryRows[_selectedEntryForColorPicker];
         if (entryRefs.ColorButton != null)
         {
-            var buttonImage = entryRefs.ColorButton.GetComponent<Image>();
-            if (buttonImage != null)
-                buttonImage.color = selectedColor;
+            ConfigureEntryIconActionButton(entryRefs.ColorButton, selectedColor, true);
         }
 
         _selectedLoopForColorPicker = -1;
@@ -111,7 +109,25 @@ public partial class MainMenuHtmlController
         if (string.IsNullOrWhiteSpace(duration))
             return 0;
 
+        const int maxSeconds = 359999; // 99:59:59
+
         var parts = duration.Split(':');
+        if (parts.Length == 3)
+        {
+            var hours = 0;
+            var hoursMinutes = 0;
+            var hoursSeconds = 0;
+
+            int.TryParse(parts[0], out hours);
+            int.TryParse(parts[1], out hoursMinutes);
+            int.TryParse(parts[2], out hoursSeconds);
+
+            hours = Mathf.Clamp(hours, 0, 99);
+            hoursMinutes = Mathf.Clamp(hoursMinutes, 0, 59);
+            hoursSeconds = Mathf.Clamp(hoursSeconds, 0, 59);
+            return Mathf.Clamp((hours * 3600) + (hoursMinutes * 60) + hoursSeconds, 0, maxSeconds);
+        }
+
         if (parts.Length == 2)
         {
             var minutes = 0;
@@ -120,20 +136,28 @@ public partial class MainMenuHtmlController
             int.TryParse(parts[0], out minutes);
             int.TryParse(parts[1], out seconds);
 
-            minutes = Mathf.Clamp(minutes, 0, 99);
+            minutes = Mathf.Clamp(minutes, 0, 5999);
             seconds = Mathf.Clamp(seconds, 0, 59);
-            return minutes * 60 + seconds;
+            return Mathf.Clamp(minutes * 60 + seconds, 0, maxSeconds);
         }
 
         if (int.TryParse(duration, out var rawSeconds))
-            return Mathf.Clamp(rawSeconds, 0, 5999);
+            return Mathf.Clamp(rawSeconds, 0, maxSeconds);
 
         return 0;
     }
 
     private static string FormatSeconds(int totalSeconds)
     {
-        totalSeconds = Mathf.Clamp(totalSeconds, 0, 5999);
+        totalSeconds = Mathf.Clamp(totalSeconds, 0, 359999);
+        if (totalSeconds >= 3600)
+        {
+            var hours = totalSeconds / 3600;
+            var hoursMinutes = (totalSeconds % 3600) / 60;
+            var hoursSeconds = totalSeconds % 60;
+            return $"{hours:00}:{hoursMinutes:00}:{hoursSeconds:00}";
+        }
+
         var minutes = totalSeconds / 60;
         var seconds = totalSeconds % 60;
         return $"{minutes:00}:{seconds:00}";
@@ -141,7 +165,15 @@ public partial class MainMenuHtmlController
 
     private static string FormatLongSeconds(int totalSeconds)
     {
-        totalSeconds = Mathf.Max(0, totalSeconds);
+        totalSeconds = Mathf.Clamp(totalSeconds, 0, 359999);
+        if (totalSeconds >= 3600)
+        {
+            var hours = totalSeconds / 3600;
+            var hoursMinutes = (totalSeconds % 3600) / 60;
+            var hoursSeconds = totalSeconds % 60;
+            return $"{hours:00}:{hoursMinutes:00}:{hoursSeconds:00}";
+        }
+
         var minutes = totalSeconds / 60;
         var seconds = totalSeconds % 60;
         return $"{minutes:00}:{seconds:00}";

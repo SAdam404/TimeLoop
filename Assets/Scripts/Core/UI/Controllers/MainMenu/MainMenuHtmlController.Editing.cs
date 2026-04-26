@@ -90,7 +90,9 @@ public partial class MainMenuHtmlController
         {
             name = source?.name ?? "New Entry",
             durationSeconds = source != null ? Mathf.Max(0f, source.durationSeconds) : 60f,
-            color = source != null ? source.color : Color.white
+            color = source != null ? source.color : Color.white,
+            mode = source != null ? source.mode : EntryMode.TIME,
+            repCount = source != null ? source.repCount : 1
         };
 
         loop.entries.Insert(index + 1, clone);
@@ -131,7 +133,7 @@ public partial class MainMenuHtmlController
 
         var currentText = entryRow.DurationInput.text;
         var totalSeconds = ParseDurationToSeconds(currentText);
-        var nextTotalSeconds = Mathf.Clamp(totalSeconds + deltaSeconds, 0, 5999);
+        var nextTotalSeconds = Mathf.Clamp(totalSeconds + deltaSeconds, 0, 359999);
         var formatted = FormatSeconds(nextTotalSeconds);
 
         entryRow.DurationInput.text = formatted;
@@ -201,6 +203,10 @@ public partial class MainMenuHtmlController
                 if (ui.DurationInput != null)
                     entry.durationSeconds = ParseDurationToSeconds(ui.DurationInput.text);
 
+                // Sync mode and rep count
+                if (ui.RepCountInput != null && int.TryParse(ui.RepCountInput.text, out var repCount))
+                    entry.repCount = Mathf.Clamp(repCount, 1, 999);
+
                 loop.entries[entryIndex] = entry;
             }
         }
@@ -259,7 +265,16 @@ public partial class MainMenuHtmlController
             if (entry == null)
                 continue;
 
-            sum += Mathf.RoundToInt(Mathf.Max(0f, entry.durationSeconds));
+            var perRepOrDuration = Mathf.RoundToInt(Mathf.Max(0f, entry.durationSeconds));
+            if (entry.mode == EntryMode.REPS)
+            {
+                var reps = Mathf.Clamp(entry.repCount <= 0 ? 1 : entry.repCount, 1, 999);
+                sum += perRepOrDuration * reps;
+            }
+            else
+            {
+                sum += perRepOrDuration;
+            }
         }
 
         var repeat = Mathf.Clamp(loop.repeatCount <= 0 ? 1 : loop.repeatCount, 1, 99);
@@ -296,7 +311,9 @@ public partial class MainMenuHtmlController
                     {
                         name = string.IsNullOrWhiteSpace(sourceEntry.name) ? "New Entry" : sourceEntry.name,
                         durationSeconds = Mathf.Max(0f, sourceEntry.durationSeconds),
-                        color = sourceEntry.color
+                        color = sourceEntry.color,
+                        mode = sourceEntry.mode,
+                        repCount = Mathf.Clamp(sourceEntry.repCount <= 0 ? 1 : sourceEntry.repCount, 1, 999)
                     });
                 }
             }

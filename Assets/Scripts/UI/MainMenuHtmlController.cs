@@ -10,6 +10,10 @@ using UnityEngine.UI;
 [RequireComponent(typeof(UIHandler))]
 public partial class MainMenuHtmlController : MonoBehaviour
 {
+    private static readonly Color EntryIconButtonIdleColor = new Color(0f, 0f, 0f, 0f);
+    private static readonly Color EntryIconButtonHoverColor = new Color(0f, 0f, 0f, 0.18f);
+    private static readonly Color EntryIconButtonPressedColor = new Color(0f, 0f, 0f, 0.28f);
+
     private const string MainMenuSceneName = "MainMenuScene";
     private const string TimerCreationSceneName = "TimerCreationScene";
     private const string MainMenuResourcePath = "TimeLoop/ui-main-menu";
@@ -222,12 +226,18 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
         if (refs.HeaderRow != null)
             refs.HeaderRow.SetActive(active);
+        if (refs.ModeRow != null)
+            refs.ModeRow.SetActive(active);
         if (refs.NameRow != null)
             refs.NameRow.SetActive(active);
         if (refs.DurationHeaderRow != null)
             refs.DurationHeaderRow.SetActive(active);
         if (refs.DurationRow != null)
             refs.DurationRow.SetActive(active);
+        if (refs.RepCountHeaderRow != null)
+            refs.RepCountHeaderRow.SetActive(active);
+        if (refs.RepCountRow != null)
+            refs.RepCountRow.SetActive(active);
         if (refs.ControlsRow != null)
             refs.ControlsRow.SetActive(active);
     }
@@ -241,19 +251,54 @@ public partial class MainMenuHtmlController : MonoBehaviour
             ui.DurationInput.text = FormatSeconds(Mathf.RoundToInt(Mathf.Max(0f, entry.durationSeconds)));
 
         if (ui.ColorButton != null)
+            ConfigureEntryIconActionButton(ui.ColorButton, entry.color, true);
+
+        // Apply entry mode UI data
+        bool isRepsMode = entry.mode == EntryMode.REPS;
+        
+        // Update mode button colors
+        if (ui.ModeTimeButton != null)
         {
-            var buttonImage = ui.ColorButton.GetComponent<Image>();
-            if (buttonImage != null)
-                buttonImage.color = entry.color;
+            var timeImage = ui.ModeTimeButton.GetComponent<Image>();
+            if (timeImage != null)
+                timeImage.color = !isRepsMode ? new Color(0.212f, 0.39f, 0.848f, 1f) : new Color(0.22f, 0.247f, 0.369f, 1f);
         }
+        if (ui.ModeRepsButton != null)
+        {
+            var repsImage = ui.ModeRepsButton.GetComponent<Image>();
+            if (repsImage != null)
+                repsImage.color = isRepsMode ? new Color(0.212f, 0.39f, 0.848f, 1f) : new Color(0.22f, 0.247f, 0.369f, 1f);
+        }
+
+        // Show/hide rows based on mode. Duration stays visible in both modes;
+        // in REPS mode this acts as time-per-rep below the rep counter.
+        if (ui.DurationHeaderRow != null)
+            ui.DurationHeaderRow.SetActive(true);
+        if (ui.DurationRow != null)
+            ui.DurationRow.SetActive(true);
+        if (ui.RepCountHeaderRow != null)
+            ui.RepCountHeaderRow.SetActive(isRepsMode);
+        if (ui.RepCountRow != null)
+            ui.RepCountRow.SetActive(isRepsMode);
+
+        var durationHead = FindDescendantComponent<Text>(ui.DurationHeaderRow, "EntryDurationHead");
+        if (durationHead != null)
+            durationHead.text = isRepsMode ? "Time / Rep (MM:SS)" : "Duration (MM:SS)";
+        
+        // Apply rep count if in REPS mode
+        if (isRepsMode && ui.RepCountInput != null)
+            ui.RepCountInput.text = entry.repCount.ToString();
     }
 
     private void WireLoopButtons(LoopUiRefs loopUi, int loopIndex)
     {
         WireLoopDragTarget(loopUi, loopIndex);
+        WireInputFieldScrollRelay(loopUi.RepeatInput);
 
         if (loopUi.RepeatMinusButton != null)
         {
+            ConfigureTransparentIconButton(loopUi.RepeatMinusButton);
+            WireButtonScrollRelay(loopUi.RepeatMinusButton);
             loopUi.RepeatMinusButton.onClick.RemoveAllListeners();
             var capturedLoopIndex = loopIndex;
             loopUi.RepeatMinusButton.onClick.AddListener(() => AdjustRepeat(capturedLoopIndex, -1));
@@ -261,6 +306,8 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
         if (loopUi.RepeatPlusButton != null)
         {
+            ConfigureTransparentIconButton(loopUi.RepeatPlusButton);
+            WireButtonScrollRelay(loopUi.RepeatPlusButton);
             loopUi.RepeatPlusButton.onClick.RemoveAllListeners();
             var capturedLoopIndex = loopIndex;
             loopUi.RepeatPlusButton.onClick.AddListener(() => AdjustRepeat(capturedLoopIndex, 1));
@@ -268,6 +315,7 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
         if (loopUi.AddEntryButton != null)
         {
+            WireButtonScrollRelay(loopUi.AddEntryButton);
             loopUi.AddEntryButton.onClick.RemoveAllListeners();
             var capturedLoopIndex = loopIndex;
             loopUi.AddEntryButton.onClick.AddListener(() => OnAddEntryPressed(capturedLoopIndex));
@@ -279,9 +327,67 @@ public partial class MainMenuHtmlController : MonoBehaviour
         var ui = loopUi.EntryRows[index];
 
         WireEntryDragTargets(ui, loopIndex, index);
+        WireInputFieldScrollRelay(ui.NameInput);
+        WireInputFieldScrollRelay(ui.DurationInput);
+
+        // Wire entry mode buttons
+        if (ui.ModeTimeButton != null)
+        {
+            WireButtonScrollRelay(ui.ModeTimeButton);
+            ui.ModeTimeButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
+            var capturedIndex = index;
+            ui.ModeTimeButton.onClick.AddListener(() => OnSetEntryMode(capturedLoopIndex, capturedIndex, EntryMode.TIME));
+        }
+        if (ui.ModeRepsButton != null)
+        {
+            WireButtonScrollRelay(ui.ModeRepsButton);
+            ui.ModeRepsButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
+            var capturedIndex = index;
+            ui.ModeRepsButton.onClick.AddListener(() => OnSetEntryMode(capturedLoopIndex, capturedIndex, EntryMode.REPS));
+        }
+
+        // Wire rep count buttons and scroll relay
+        WireInputFieldScrollRelay(ui.RepCountInput);
+        if (ui.RepCountInput != null)
+        {
+            ui.RepCountInput.onValueChanged.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
+            var capturedIndex = index;
+            ui.RepCountInput.onValueChanged.AddListener(value => OnEntryRepCountInputChanged(capturedLoopIndex, capturedIndex, value));
+        }
+        if (ui.RepCountMinusButton != null)
+        {
+            ConfigureTransparentIconButton(ui.RepCountMinusButton);
+            WireButtonScrollRelay(ui.RepCountMinusButton);
+            ui.RepCountMinusButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
+            var capturedIndex = index;
+            ui.RepCountMinusButton.onClick.AddListener(() => AdjustEntryRepCount(capturedLoopIndex, capturedIndex, -1));
+        }
+        if (ui.RepCountPlusButton != null)
+        {
+            ConfigureTransparentIconButton(ui.RepCountPlusButton);
+            WireButtonScrollRelay(ui.RepCountPlusButton);
+            ui.RepCountPlusButton.onClick.RemoveAllListeners();
+            var capturedLoopIndex = loopIndex;
+            var capturedIndex = index;
+            ui.RepCountPlusButton.onClick.AddListener(() => AdjustEntryRepCount(capturedLoopIndex, capturedIndex, 1));
+        }
 
         if (ui.ColorButton != null)
         {
+            var buttonColor = Color.white;
+            if (loopIndex >= 0 && loopIndex < _workingPreset.loops.Count)
+            {
+                var loop = _workingPreset.loops[loopIndex];
+                if (loop != null && loop.entries != null && index >= 0 && index < loop.entries.Count && loop.entries[index] != null)
+                    buttonColor = loop.entries[index].color;
+            }
+
+            ConfigureEntryIconActionButton(ui.ColorButton, buttonColor, true);
+            WireButtonScrollRelay(ui.ColorButton);
             ui.ColorButton.onClick.RemoveAllListeners();
             var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
@@ -290,6 +396,8 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
         if (ui.DuplicateButton != null)
         {
+            ConfigureEntryIconActionButton(ui.DuplicateButton);
+            WireButtonScrollRelay(ui.DuplicateButton);
             ui.DuplicateButton.onClick.RemoveAllListeners();
             var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
@@ -298,6 +406,8 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
         if (ui.DeleteButton != null)
         {
+            ConfigureEntryIconActionButton(ui.DeleteButton);
+            WireButtonScrollRelay(ui.DeleteButton);
             ui.DeleteButton.onClick.RemoveAllListeners();
             var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
@@ -306,6 +416,8 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
         if (ui.DurationMinusButton != null)
         {
+            ConfigureTransparentIconButton(ui.DurationMinusButton);
+            WireButtonScrollRelay(ui.DurationMinusButton);
             ui.DurationMinusButton.onClick.RemoveAllListeners();
             var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
@@ -314,11 +426,122 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
         if (ui.DurationPlusButton != null)
         {
+            ConfigureTransparentIconButton(ui.DurationPlusButton);
+            WireButtonScrollRelay(ui.DurationPlusButton);
             ui.DurationPlusButton.onClick.RemoveAllListeners();
             var capturedLoopIndex = loopIndex;
             var capturedIndex = index;
             ui.DurationPlusButton.onClick.AddListener(() => OnEntryDurationAdjust(capturedLoopIndex, capturedIndex, 5));
         }
+    }
+
+    private void WireInputFieldScrollRelay(InputField inputField)
+    {
+        if (inputField == null)
+            return;
+
+        var relay = inputField.GetComponent<InputFieldScrollRelay>();
+        if (relay == null)
+            relay = inputField.gameObject.AddComponent<InputFieldScrollRelay>();
+
+        relay.Owner = this;
+        relay.TargetInput = inputField;
+    }
+
+    private void WireButtonScrollRelay(Button button)
+    {
+        if (button == null)
+            return;
+
+        var relay = button.GetComponent<ButtonScrollRelay>();
+        if (relay == null)
+            relay = button.gameObject.AddComponent<ButtonScrollRelay>();
+
+        relay.Owner = this;
+    }
+
+    private static void ConfigureEntryIconActionButton(Button button)
+    {
+        ConfigureEntryIconActionButton(button, EntryIconButtonIdleColor, false);
+    }
+
+    private static void ConfigureTransparentIconButton(Button button)
+    {
+        ConfigureEntryIconActionButton(button, EntryIconButtonIdleColor, false);
+    }
+
+    private static void ConfigureEntryIconActionButton(Button button, Color baseColor, bool useBaseColor)
+    {
+        if (button == null)
+            return;
+
+        var image = button.GetComponent<Image>();
+        if (image == null)
+            return;
+
+        var baseState = useBaseColor ? baseColor : EntryIconButtonIdleColor;
+        var hoverState = useBaseColor ? Color.Lerp(baseColor, Color.black, 0.18f) : EntryIconButtonHoverColor;
+        var pressedState = useBaseColor ? Color.Lerp(baseColor, Color.black, 0.28f) : EntryIconButtonPressedColor;
+
+        image.color = baseState;
+        button.transition = Selectable.Transition.None;
+
+        var trigger = button.GetComponent<EventTrigger>();
+        if (trigger == null)
+            trigger = button.gameObject.AddComponent<EventTrigger>();
+
+        trigger.triggers.Clear();
+
+        AddButtonVisualTrigger(trigger, EventTriggerType.PointerEnter, _ => image.color = hoverState);
+        AddButtonVisualTrigger(trigger, EventTriggerType.PointerExit, _ => image.color = baseState);
+        AddButtonVisualTrigger(trigger, EventTriggerType.PointerDown, _ => image.color = pressedState);
+        AddButtonVisualTrigger(trigger, EventTriggerType.PointerUp, _ => image.color = hoverState);
+        AddButtonVisualTrigger(trigger, EventTriggerType.Cancel, _ => image.color = baseState);
+    }
+
+    private static void AddButtonVisualTrigger(EventTrigger trigger, EventTriggerType type, UnityEngine.Events.UnityAction<BaseEventData> action)
+    {
+        if (trigger == null || action == null)
+            return;
+
+        var entry = new EventTrigger.Entry { eventID = type };
+        entry.callback.AddListener(action);
+        trigger.triggers.Add(entry);
+    }
+
+    private void OnInputFieldScrollBegin(PointerEventData eventData)
+    {
+        if (_creationScrollRect == null || !_creationScrollRect.enabled)
+            return;
+
+        if (EventSystem.current != null)
+            EventSystem.current.SetSelectedGameObject(null);
+
+        _creationScrollRect.OnBeginDrag(eventData);
+    }
+
+    private void OnInputFieldScrollMove(PointerEventData eventData)
+    {
+        if (_creationScrollRect == null || !_creationScrollRect.enabled)
+            return;
+
+        _creationScrollRect.OnDrag(eventData);
+    }
+
+    private void OnInputFieldScrollEnd(PointerEventData eventData)
+    {
+        if (_creationScrollRect == null || !_creationScrollRect.enabled)
+            return;
+
+        _creationScrollRect.OnEndDrag(eventData);
+    }
+
+    private void OnCreationScrollWheel(PointerEventData eventData)
+    {
+        if (_creationScrollRect == null || !_creationScrollRect.enabled || eventData == null)
+            return;
+
+        _creationScrollRect.OnScroll(eventData);
     }
 
     private void WireEntryDragTargets(EntryUiRefs ui, int loopIndex, int index)
@@ -359,13 +582,16 @@ public partial class MainMenuHtmlController : MonoBehaviour
             AddEntryButton = FindDescendantComponent<Button>(sectionRoot, "AddEntryBtn"),
             AddButtonsRow = FindDescendant(sectionRoot, "AddButtonsRow"),
             EntryHeaderRow = FindDescendant(sectionRoot, "EntryRowHeader"),
+            EntryModeRowTemplate = FindDescendant(sectionRoot, "EntryModeRow"),
             EntryRowTemplate = FindDescendant(sectionRoot, "EntryRow1"),
             DurationHeaderRow = FindDescendant(sectionRoot, "EntryDurationHeader"),
             DurationRowTemplate = FindDescendant(sectionRoot, "EntryDurationRow"),
+            RepCountHeaderRow = FindDescendant(sectionRoot, "EntryRepCountHeader"),
+            RepCountRowTemplate = FindDescendant(sectionRoot, "EntryRepCountRow"),
             ControlsRowTemplate = FindDescendant(sectionRoot, "EntryControlsRow")
         };
 
-        return loopUi.EntryRowTemplate == null || loopUi.DurationRowTemplate == null || loopUi.ControlsRowTemplate == null ? null : loopUi;
+        return loopUi.EntryModeRowTemplate == null || loopUi.EntryRowTemplate == null || loopUi.DurationRowTemplate == null || loopUi.RepCountRowTemplate == null || loopUi.ControlsRowTemplate == null ? null : loopUi;
     }
 
     private void CaptureBaseEntryLayout(LoopUiRefs loopUi)
@@ -373,21 +599,27 @@ public partial class MainMenuHtmlController : MonoBehaviour
         if (loopUi == null)
             return;
 
-        loopUi.BaseLoopSectionHeight = 872f;
-        loopUi.BaseLoopSectionPreferredHeight = 872f;
-        loopUi.BaseAddButtonsY = -758f;
+        loopUi.BaseLoopSectionHeight = 1320f;
+        loopUi.BaseLoopSectionPreferredHeight = 1320f;
+        loopUi.BaseAddButtonsY = -992f;
+        loopUi.BaseEntryModeRowY = -482f;
         loopUi.BaseEntryRowHeaderY = -360f;
         loopUi.BaseEntryRowY = -360f;
-        loopUi.BaseEntryDurationHeaderY = -482f;
-        loopUi.BaseEntryDurationRowY = -482f;
-        loopUi.BaseEntryControlsRowY = -604f;
-        loopUi.EntryBlockYOffset = 398f;
+        loopUi.BaseEntryDurationHeaderY = -716f;
+        loopUi.BaseEntryDurationRowY = -716f;
+        loopUi.BaseEntryRepCountHeaderY = -594f;
+        loopUi.BaseEntryRepCountRowY = -594f;
+        loopUi.BaseEntryControlsRowY = -838f;
+        loopUi.EntryBlockYOffset = 632f;
 
         // Restore the template rows to their intended baseline before any cloned rows are positioned.
         SetAnchoredY(loopUi.EntryHeaderRow, loopUi.BaseEntryRowHeaderY);
+        SetAnchoredY(loopUi.EntryModeRowTemplate, loopUi.BaseEntryModeRowY);
         SetAnchoredY(loopUi.EntryRowTemplate, loopUi.BaseEntryRowY);
         SetAnchoredY(loopUi.DurationHeaderRow, loopUi.BaseEntryDurationHeaderY);
         SetAnchoredY(loopUi.DurationRowTemplate, loopUi.BaseEntryDurationRowY);
+        SetAnchoredY(loopUi.RepCountHeaderRow, loopUi.BaseEntryRepCountHeaderY);
+        SetAnchoredY(loopUi.RepCountRowTemplate, loopUi.BaseEntryRepCountRowY);
         SetAnchoredY(loopUi.ControlsRowTemplate, loopUi.BaseEntryControlsRowY);
         SetAnchoredY(loopUi.AddButtonsRow, loopUi.BaseAddButtonsY);
 
@@ -409,51 +641,73 @@ public partial class MainMenuHtmlController : MonoBehaviour
         var refs = new EntryUiRefs
         {
             HeaderRow = loopUi.EntryHeaderRow,
+            ModeRow = loopUi.EntryModeRowTemplate,
             NameRow = loopUi.EntryRowTemplate,
             DurationHeaderRow = loopUi.DurationHeaderRow,
             DurationRow = loopUi.DurationRowTemplate,
+            RepCountHeaderRow = loopUi.RepCountHeaderRow,
+            RepCountRow = loopUi.RepCountRowTemplate,
             ControlsRow = loopUi.ControlsRowTemplate
         };
 
+        refs.ModeTimeButton = FindDescendantComponent<Button>(refs.ModeRow, "Entry1ModeTime");
+        refs.ModeRepsButton = FindDescendantComponent<Button>(refs.ModeRow, "Entry1ModeReps");
         refs.NameInput = refs.NameRow != null ? refs.NameRow.GetComponentInChildren<InputField>(true) : null;
         refs.DurationInput = refs.DurationRow != null ? refs.DurationRow.GetComponentInChildren<InputField>(true) : null;
+        refs.RepCountInput = refs.RepCountRow != null ? refs.RepCountRow.GetComponentInChildren<InputField>(true) : null;
         refs.DurationMinusButton = FindDescendantComponent<Button>(refs.DurationRow, "Entry1DurationMinus");
         refs.DurationPlusButton = FindDescendantComponent<Button>(refs.DurationRow, "Entry1DurationPlus");
+        refs.RepCountMinusButton = FindDescendantComponent<Button>(refs.RepCountRow, "Entry1RepMinus");
+        refs.RepCountPlusButton = FindDescendantComponent<Button>(refs.RepCountRow, "Entry1RepPlus");
         refs.ColorButton = FindDescendantComponent<Button>(refs.ControlsRow, "Entry1Color");
         refs.DuplicateButton = FindDescendantComponent<Button>(refs.ControlsRow, "Entry1Dup");
         refs.DeleteButton = FindDescendantComponent<Button>(refs.ControlsRow, "Entry1Delete");
         refs.DragHandle = FindDescendant(refs.NameRow, "Entry1DragHandle");
-        return refs.NameRow == null || refs.DurationRow == null || refs.ControlsRow == null ? null : refs;
+        return refs.ModeRow == null || refs.NameRow == null || refs.DurationRow == null || refs.RepCountRow == null || refs.ControlsRow == null ? null : refs;
     }
 
     private EntryUiRefs CloneEntryRows(LoopUiRefs loopUi, EntryUiRefs template, int index)
     {
+        var modeClone = InstantiateRowClone(template.ModeRow, $"EntryModeRow_{index}");
         var headerClone = InstantiateRowClone(template.HeaderRow, $"EntryRowHeader_{index}");
         var nameClone = InstantiateRowClone(template.NameRow, $"EntryRow1_{index}");
         var durationHeaderClone = InstantiateRowClone(template.DurationHeaderRow, $"EntryDurationHeader_{index}");
         var durationClone = InstantiateRowClone(template.DurationRow, $"EntryDurationRow_{index}");
+        var repCountHeaderClone = InstantiateRowClone(template.RepCountHeaderRow, $"EntryRepCountHeader_{index}");
+        var repCountClone = InstantiateRowClone(template.RepCountRow, $"EntryRepCountRow_{index}");
         var controlsClone = InstantiateRowClone(template.ControlsRow, $"EntryControlsRow_{index}");
 
-        if (headerClone == null || nameClone == null || durationHeaderClone == null || durationClone == null || controlsClone == null)
+        if (modeClone == null || headerClone == null || nameClone == null || durationHeaderClone == null || durationClone == null || repCountHeaderClone == null || repCountClone == null || controlsClone == null)
             return null;
 
+        loopUi.DynamicEntryObjects.Add(modeClone);
         loopUi.DynamicEntryObjects.Add(headerClone);
         loopUi.DynamicEntryObjects.Add(nameClone);
         loopUi.DynamicEntryObjects.Add(durationHeaderClone);
         loopUi.DynamicEntryObjects.Add(durationClone);
+        loopUi.DynamicEntryObjects.Add(repCountHeaderClone);
+        loopUi.DynamicEntryObjects.Add(repCountClone);
         loopUi.DynamicEntryObjects.Add(controlsClone);
 
         return new EntryUiRefs
         {
             HeaderRow = headerClone,
+            ModeRow = modeClone,
             NameRow = nameClone,
             DurationHeaderRow = durationHeaderClone,
             DurationRow = durationClone,
+            RepCountHeaderRow = repCountHeaderClone,
+            RepCountRow = repCountClone,
             ControlsRow = controlsClone,
             NameInput = nameClone.GetComponentInChildren<InputField>(true),
             DurationInput = durationClone.GetComponentInChildren<InputField>(true),
+            RepCountInput = repCountClone.GetComponentInChildren<InputField>(true),
+            ModeTimeButton = FindDescendantComponent<Button>(modeClone, "Entry1ModeTime"),
+            ModeRepsButton = FindDescendantComponent<Button>(modeClone, "Entry1ModeReps"),
             DurationMinusButton = FindDescendantComponent<Button>(durationClone, "Entry1DurationMinus"),
             DurationPlusButton = FindDescendantComponent<Button>(durationClone, "Entry1DurationPlus"),
+            RepCountMinusButton = FindDescendantComponent<Button>(repCountClone, "Entry1RepMinus"),
+            RepCountPlusButton = FindDescendantComponent<Button>(repCountClone, "Entry1RepPlus"),
             ColorButton = FindDescendantComponent<Button>(controlsClone, "Entry1Color"),
             DuplicateButton = FindDescendantComponent<Button>(controlsClone, "Entry1Dup"),
             DeleteButton = FindDescendantComponent<Button>(controlsClone, "Entry1Delete"),

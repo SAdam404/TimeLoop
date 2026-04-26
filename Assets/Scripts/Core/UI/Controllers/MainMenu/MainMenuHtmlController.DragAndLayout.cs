@@ -5,6 +5,10 @@ using UnityEngine.UI;
 
 public partial class MainMenuHtmlController
 {
+    private static readonly Color DragHandleIdleColor = new Color(0f, 0f, 0f, 0f);
+    private static readonly Color DragHandleHoverColor = new Color(0f, 0f, 0f, 0.18f);
+    private static readonly Color DragHandlePressedColor = new Color(0f, 0f, 0f, 0.28f);
+
     private void WireEntryDragSurface(GameObject dragSurface, int loopIndex, int index)
     {
         if (dragSurface == null)
@@ -12,7 +16,10 @@ public partial class MainMenuHtmlController
 
         var surfaceImage = dragSurface.GetComponent<Image>();
         if (surfaceImage != null)
+        {
             surfaceImage.raycastTarget = true;
+            SetDragHandleVisualState(dragSurface, false, false);
+        }
 
         var relay = dragSurface.GetComponent<EntryDragRelay>() ?? dragSurface.AddComponent<EntryDragRelay>();
         relay.Owner = this;
@@ -27,7 +34,10 @@ public partial class MainMenuHtmlController
 
         var surfaceImage = loopUi.LoopDragHandle.GetComponent<Image>();
         if (surfaceImage != null)
+        {
             surfaceImage.raycastTarget = true;
+            SetDragHandleVisualState(loopUi.LoopDragHandle, false, false);
+        }
 
         var relay = loopUi.LoopDragHandle.GetComponent<LoopDragRelay>() ?? loopUi.LoopDragHandle.AddComponent<LoopDragRelay>();
         relay.Owner = this;
@@ -41,6 +51,18 @@ public partial class MainMenuHtmlController
 
             images[i].raycastTarget = images[i].gameObject == loopUi.LoopDragHandle;
         }
+    }
+
+    private void SetDragHandleVisualState(GameObject dragHandle, bool isHovered, bool isPressed)
+    {
+        if (dragHandle == null)
+            return;
+
+        var image = dragHandle.GetComponent<Image>();
+        if (image == null)
+            return;
+
+        image.color = isPressed ? DragHandlePressedColor : (isHovered ? DragHandleHoverColor : DragHandleIdleColor);
     }
 
     private void OnLoopDragBegin(int loopIndex, PointerEventData eventData)
@@ -70,7 +92,7 @@ public partial class MainMenuHtmlController
         _lastLoopSwapDirection = 0;
 
         SetCreationScrollEnabled(false);
-        BeginLoopDragVisual(_loopUiSections[_loopDragCurrentIndex].SectionRoot);
+        BeginLoopDragVisual(_loopUiSections[_loopDragCurrentIndex].SectionRoot, elevateSorting: false);
     }
 
     private void OnLoopDragMove(PointerEventData eventData)
@@ -240,28 +262,38 @@ public partial class MainMenuHtmlController
         addLoopPanel.transform.SetAsLastSibling();
     }
 
-    private void BeginLoopDragVisual(GameObject sectionRoot)
+    private void BeginLoopDragVisual(GameObject sectionRoot, bool elevateSorting = true)
     {
         EndLoopDragVisual();
 
         if (sectionRoot == null)
             return;
 
-        _activeLoopDragCanvas = sectionRoot.GetComponent<Canvas>();
-        if (_activeLoopDragCanvas == null)
+        if (elevateSorting)
         {
-            _activeLoopDragCanvas = sectionRoot.AddComponent<Canvas>();
-            _activeLoopDragCanvasAdded = true;
+            _activeLoopDragCanvas = sectionRoot.GetComponent<Canvas>();
+            if (_activeLoopDragCanvas == null)
+            {
+                _activeLoopDragCanvas = sectionRoot.AddComponent<Canvas>();
+                _activeLoopDragCanvasAdded = true;
+            }
+            else
+            {
+                _activeLoopDragCanvasAdded = false;
+            }
+
+            _activeLoopDragCanvasOriginalOverride = _activeLoopDragCanvas.overrideSorting;
+            _activeLoopDragCanvasOriginalOrder = _activeLoopDragCanvas.sortingOrder;
+            _activeLoopDragCanvas.overrideSorting = true;
+            _activeLoopDragCanvas.sortingOrder = 500;
         }
         else
         {
+            _activeLoopDragCanvas = null;
             _activeLoopDragCanvasAdded = false;
+            _activeLoopDragCanvasOriginalOverride = false;
+            _activeLoopDragCanvasOriginalOrder = 0;
         }
-
-        _activeLoopDragCanvasOriginalOverride = _activeLoopDragCanvas.overrideSorting;
-        _activeLoopDragCanvasOriginalOrder = _activeLoopDragCanvas.sortingOrder;
-        _activeLoopDragCanvas.overrideSorting = true;
-        _activeLoopDragCanvas.sortingOrder = 500;
 
         _activeLoopDragCanvasGroup = sectionRoot.GetComponent<CanvasGroup>();
         if (_activeLoopDragCanvasGroup == null)
@@ -277,7 +309,7 @@ public partial class MainMenuHtmlController
         }
 
         // Keep underlying loops visible while dragging a full loop block.
-        _activeLoopDragCanvasGroup.alpha = 0.86f;
+        _activeLoopDragCanvasGroup.alpha = 0.58f;
     }
 
     private void EndLoopDragVisual()
@@ -371,10 +403,18 @@ public partial class MainMenuHtmlController
         _dragLastPointerY = GetPointerYInDragSpace(eventData);
         _dragPointerDeltaY = _dragLastPointerY - _dragStartPointerY;
 
+        // Reset all entries to their natural (clean) positions first.
+        // TryReorderEntryDuringDrag relies on reading clean natural Y — no offset applied yet.
         ApplyEntryLayoutForCount(loopUi, loop != null && loop.entries != null ? loop.entries.Count : loopUi.EntryRows.Count);
-        ApplyDraggedBlockOffset(_dragCurrentIndex, _dragPointerDeltaY);
 
         TryReorderEntryDuringDrag(_dragLastPointerY);
+
+        // After any swap, _dragPointerDeltaY and _dragStartPointerY are updated; recompute delta.
+        _dragPointerDeltaY = _dragLastPointerY - _dragStartPointerY;
+
+        // Apply offset to dragged entry so it follows the finger.
+        ApplyDraggedBlockOffset(_dragCurrentIndex, _dragPointerDeltaY);
+        BringDraggedEntryToFront(_dragLoopIndex, _dragCurrentIndex);
         ApplyCrossLoopPreview(_dragLastPointerY);
     }
 
@@ -409,7 +449,8 @@ public partial class MainMenuHtmlController
             return _dragCurrentIndex;
 
         var deltaY = pointerY - _dragStartPointerY;
-        var swapThreshold = Mathf.Clamp(loopUi.EntryBlockYOffset * 0.42f, 72f, 180f);
+        var currentBlockHeight = GetEntryBlockHeightForIndex(loopUi, loop, _dragCurrentIndex);
+        var swapThreshold = Mathf.Clamp(currentBlockHeight * 0.42f, 72f, 220f);
 
         if (Time.unscaledTime < _nextSwapAllowedTime)
             return _dragCurrentIndex;
@@ -426,7 +467,7 @@ public partial class MainMenuHtmlController
 
         if (_lastSwapDirection != 0 && direction != _lastSwapDirection)
         {
-            var reverseThreshold = swapThreshold * 1.45f;
+            var reverseThreshold = swapThreshold * 1.8f;
             if (Mathf.Abs(deltaY) < reverseThreshold)
                 return _dragCurrentIndex;
         }
@@ -455,19 +496,43 @@ public partial class MainMenuHtmlController
         if (fromIndex < 0 || fromIndex >= loop.entries.Count || toIndex == fromIndex)
             return;
 
+        // At this point ApplyEntryLayoutForCount was already called in OnEntryDragMove with NO offset
+        // applied yet, so anchoredPosition values are clean natural positions.
+        var oldNaturalY = GetDraggedEntryHeaderNaturalY(fromIndex);
+
         MoveEntry(_dragLoopIndex, fromIndex, toIndex);
         MoveEntryUiRefs(_dragLoopIndex, fromIndex, toIndex);
 
-        _dragStartPointerY -= (toIndex - fromIndex) * loopUi.EntryBlockYOffset;
-        _dragLastPointerY = pointerY;
-        _dragPointerDeltaY = _dragLastPointerY - _dragStartPointerY;
         _lastSwapDirection = Math.Sign(toIndex - fromIndex);
-        _nextSwapAllowedTime = Time.unscaledTime + 0.08f;
+        _nextSwapAllowedTime = Time.unscaledTime + 0.11f;
         _dragCurrentIndex = toIndex;
 
+        // Layout again so the entries are at new natural positions.
         ApplyEntryLayoutForCount(loopUi, loop.entries.Count);
-        ApplyDraggedBlockOffset(_dragCurrentIndex, _dragPointerDeltaY);
-        BringDraggedEntryToFront(_dragLoopIndex, _dragCurrentIndex);
+
+        // Also clean natural Y — layout was just called, no offset applied.
+        var newNaturalY = GetDraggedEntryHeaderNaturalY(_dragCurrentIndex);
+
+        // Shift the baseline so the finger-to-entry visual offset is preserved.
+        _dragStartPointerY += newNaturalY - oldNaturalY;
+        _dragLastPointerY = pointerY;
+        // _dragPointerDeltaY will be recomputed in OnEntryDragMove after we return.
+    }
+
+    private static float GetEntryBlockHeightForIndex(LoopUiRefs loopUi, Loop loop, int entryIndex)
+    {
+        if (loopUi == null)
+            return 510f;
+
+        var repsBlockHeight = Mathf.Max(240f, loopUi.EntryBlockYOffset);
+        var compactTimeReduction = 122f;
+        var timeBlockHeight = Mathf.Max(240f, repsBlockHeight - compactTimeReduction);
+
+        if (loop == null || loop.entries == null || entryIndex < 0 || entryIndex >= loop.entries.Count)
+            return repsBlockHeight;
+
+        var entry = loop.entries[entryIndex];
+        return entry != null && entry.mode == EntryMode.TIME ? timeBlockHeight : repsBlockHeight;
     }
 
     private void EndEntryDrag(float pointerY)
@@ -577,8 +642,8 @@ public partial class MainMenuHtmlController
 
         if (sourceLoopIndex == targetLoopIndex)
         {
-            var clampedTargetIndex = Mathf.Clamp(targetEntryIndex, 0, sourceLoop.entries.Count - 1);
-            MoveEntry(sourceLoopIndex, sourceEntryIndex, clampedTargetIndex);
+            // Same-loop order is already updated continuously during drag.
+            // Reordering again on pointer-up can produce an incorrect extra jump.
             return;
         }
 
@@ -645,11 +710,31 @@ public partial class MainMenuHtmlController
             var refs = loopUi.EntryRows[i];
             var previewOffset = -loopUi.EntryBlockYOffset * 0.55f;
             ApplyOffsetToRow(refs.HeaderRow, previewOffset);
+            ApplyOffsetToRow(refs.ModeRow, previewOffset);
             ApplyOffsetToRow(refs.NameRow, previewOffset);
             ApplyOffsetToRow(refs.DurationHeaderRow, previewOffset);
             ApplyOffsetToRow(refs.DurationRow, previewOffset);
+            ApplyOffsetToRow(refs.RepCountHeaderRow, previewOffset);
+            ApplyOffsetToRow(refs.RepCountRow, previewOffset);
             ApplyOffsetToRow(refs.ControlsRow, previewOffset);
         }
+    }
+
+    private float GetDraggedEntryHeaderNaturalY(int index)
+    {
+        if (_dragLoopIndex < 0 || _dragLoopIndex >= _loopUiSections.Count)
+            return 0f;
+
+        var entryRows = _loopUiSections[_dragLoopIndex].EntryRows;
+        if (index < 0 || index >= entryRows.Count)
+            return 0f;
+
+        var headerRow = entryRows[index].HeaderRow;
+        if (headerRow == null)
+            return 0f;
+
+        var rt = headerRow.GetComponent<RectTransform>();
+        return rt != null ? rt.anchoredPosition.y : 0f;
     }
 
     private void ApplyDraggedBlockOffset(int index, float deltaY)
@@ -663,9 +748,12 @@ public partial class MainMenuHtmlController
 
         var refs = entryRows[index];
         ApplyOffsetToRow(refs.HeaderRow, deltaY);
+        ApplyOffsetToRow(refs.ModeRow, deltaY);
         ApplyOffsetToRow(refs.NameRow, deltaY);
         ApplyOffsetToRow(refs.DurationHeaderRow, deltaY);
         ApplyOffsetToRow(refs.DurationRow, deltaY);
+        ApplyOffsetToRow(refs.RepCountHeaderRow, deltaY);
+        ApplyOffsetToRow(refs.RepCountRow, deltaY);
         ApplyOffsetToRow(refs.ControlsRow, deltaY);
         BringDraggedEntryToFront(_dragLoopIndex, index);
     }
@@ -681,9 +769,12 @@ public partial class MainMenuHtmlController
 
         var refs = entryRows[entryIndex];
         BringRowToFront(refs.HeaderRow);
+        BringRowToFront(refs.ModeRow);
         BringRowToFront(refs.NameRow);
         BringRowToFront(refs.DurationHeaderRow);
         BringRowToFront(refs.DurationRow);
+        BringRowToFront(refs.RepCountHeaderRow);
+        BringRowToFront(refs.RepCountRow);
         BringRowToFront(refs.ControlsRow);
     }
 
@@ -771,34 +862,74 @@ public partial class MainMenuHtmlController
             return;
 
         var effectiveCount = Mathf.Max(0, count);
-        var extra = effectiveCount - 1;
+        var loopIndex = _loopUiSections.IndexOf(loopUi);
+        var loop = loopIndex >= 0 && loopIndex < _workingPreset.loops.Count ? _workingPreset.loops[loopIndex] : null;
 
-        if (extra < -1)
-            extra = -1;
+        const float compactTimeReduction = 122f;
+        var repsBlockHeight = loopUi.EntryBlockYOffset;
+        var timeBlockHeight = repsBlockHeight - compactTimeReduction;
+
+        var cumulativeOffset = 0f;
+        var totalBlocksHeight = 0f;
 
         for (var i = 0; i < loopUi.EntryRows.Count; i++)
         {
-            var offset = loopUi.EntryBlockYOffset * i;
-            SetAnchoredY(loopUi.EntryRows[i].HeaderRow, loopUi.BaseEntryRowHeaderY - offset);
-            SetAnchoredY(loopUi.EntryRows[i].NameRow, loopUi.BaseEntryRowY - offset);
-            SetAnchoredY(loopUi.EntryRows[i].DurationHeaderRow, loopUi.BaseEntryDurationHeaderY - offset);
-            SetAnchoredY(loopUi.EntryRows[i].DurationRow, loopUi.BaseEntryDurationRowY - offset);
-            SetAnchoredY(loopUi.EntryRows[i].ControlsRow, loopUi.BaseEntryControlsRowY - offset);
+            var refs = loopUi.EntryRows[i];
+            var isRepsMode = loop != null && loop.entries != null && i < loop.entries.Count && loop.entries[i] != null && loop.entries[i].mode == EntryMode.REPS;
+
+            SetAnchoredY(refs.HeaderRow, loopUi.BaseEntryRowHeaderY - cumulativeOffset);
+            SetAnchoredY(refs.ModeRow, loopUi.BaseEntryModeRowY - cumulativeOffset);
+            SetAnchoredY(refs.NameRow, loopUi.BaseEntryRowY - cumulativeOffset);
+
+            if (isRepsMode)
+            {
+                SetAnchoredY(refs.RepCountHeaderRow, loopUi.BaseEntryRepCountHeaderY - cumulativeOffset);
+                SetAnchoredY(refs.RepCountRow, loopUi.BaseEntryRepCountRowY - cumulativeOffset);
+                SetAnchoredY(refs.DurationHeaderRow, loopUi.BaseEntryDurationHeaderY - cumulativeOffset);
+                SetAnchoredY(refs.DurationRow, loopUi.BaseEntryDurationRowY - cumulativeOffset);
+                SetAnchoredY(refs.ControlsRow, loopUi.BaseEntryControlsRowY - cumulativeOffset);
+                cumulativeOffset += repsBlockHeight;
+                totalBlocksHeight += repsBlockHeight;
+            }
+            else
+            {
+                SetAnchoredY(refs.DurationHeaderRow, loopUi.BaseEntryRepCountHeaderY - cumulativeOffset);
+                SetAnchoredY(refs.DurationRow, loopUi.BaseEntryRepCountRowY - cumulativeOffset);
+                SetAnchoredY(refs.RepCountHeaderRow, loopUi.BaseEntryRepCountHeaderY - cumulativeOffset);
+                SetAnchoredY(refs.RepCountRow, loopUi.BaseEntryRepCountRowY - cumulativeOffset);
+                SetAnchoredY(refs.ControlsRow, loopUi.BaseEntryDurationRowY - cumulativeOffset);
+                cumulativeOffset += timeBlockHeight;
+                totalBlocksHeight += timeBlockHeight;
+            }
         }
 
-        SetAnchoredY(loopUi.AddButtonsRow, loopUi.BaseAddButtonsY - loopUi.EntryBlockYOffset * extra);
+        var baselineHeight = repsBlockHeight;
+        var heightDelta = totalBlocksHeight - baselineHeight;
+
+        // Keep previous behavior for empty state where template rows are hidden.
+        if (effectiveCount == 0)
+            heightDelta = -baselineHeight;
+
+        SetAnchoredY(loopUi.AddButtonsRow, loopUi.BaseAddButtonsY - heightDelta);
+
+        // Keep section height tightly wrapped to the Add Entry row to avoid dead space below it.
+        const float bottomPadding = 18f;
+        var addButtonsRt = loopUi.AddButtonsRow != null ? loopUi.AddButtonsRow.GetComponent<RectTransform>() : null;
+        var addButtonsHeight = addButtonsRt != null ? addButtonsRt.rect.height : 110f;
+        var addButtonsCenterY = Mathf.Abs(GetAnchoredY(loopUi.AddButtonsRow));
+        var requiredSectionHeight = addButtonsCenterY + (addButtonsHeight * 0.5f) + bottomPadding;
 
         var loopSectionRt = loopUi.SectionRoot.GetComponent<RectTransform>();
         if (loopSectionRt != null)
         {
             var size = loopSectionRt.sizeDelta;
-            size.y = loopUi.BaseLoopSectionHeight + loopUi.EntryBlockYOffset * extra;
+            size.y = requiredSectionHeight;
             loopSectionRt.sizeDelta = size;
         }
 
         var loopSectionLe = loopUi.SectionRoot.GetComponent<LayoutElement>();
         if (loopSectionLe != null)
-            loopSectionLe.preferredHeight = loopUi.BaseLoopSectionPreferredHeight + loopUi.EntryBlockYOffset * extra;
+            loopSectionLe.preferredHeight = requiredSectionHeight;
     }
 
     private static float GetAnchoredY(GameObject go)

@@ -218,7 +218,10 @@ namespace TimeLoop.Core.UI
                     }
                     else
                     {
-                        // Pure icon button: center icon and keep label empty.
+                        // Pure icon button: force true center alignment.
+                        icon.rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+                        icon.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+                        icon.rectTransform.pivot = new Vector2(0.5f, 0.5f);
                         icon.rectTransform.anchoredPosition = Vector2.zero;
                     }
                 }
@@ -291,11 +294,12 @@ namespace TimeLoop.Core.UI
             var scrollRect = scrollGo.GetComponent<ScrollRect>();
             scrollRect.horizontal = false;
             scrollRect.vertical = true;
-            scrollRect.scrollSensitivity = 30f;
-            scrollRect.movementType = ScrollRect.MovementType.Elastic;
-            scrollRect.elasticity = 0.1f;
+            scrollRect.scrollSensitivity = 22f;
+            // Clamped scrolling avoids expensive elastic bounce recalculations on low-end mobile devices.
+            scrollRect.movementType = ScrollRect.MovementType.Clamped;
+            scrollRect.elasticity = 0f;
             scrollRect.inertia = true;
-            scrollRect.decelerationRate = 0.135f;
+            scrollRect.decelerationRate = 0.08f;
 
             // Viewport with mask
             var viewportGo = new GameObject($"{id}_Viewport", typeof(RectTransform), typeof(Image), typeof(Mask));
@@ -464,14 +468,20 @@ namespace TimeLoop.Core.UI
 
                 case "duration":
                     inputField.contentType = InputField.ContentType.Standard;
-                    inputField.characterLimit = maxLength > 0 ? maxLength : 5;
+                    inputField.characterLimit = maxLength > 0 ? maxLength : 8;
                     inputField.onValueChanged.AddListener(value =>
                     {
                         var sanitized = SanitizeDuration(value);
                         if (!string.Equals(value, sanitized, StringComparison.Ordinal))
                             inputField.text = sanitized;
                     });
-                    inputField.text = SanitizeDuration(inputField.text);
+                    inputField.onEndEdit.AddListener(value =>
+                    {
+                        var normalized = NormalizeDurationForDisplay(value);
+                        if (!string.Equals(inputField.text, normalized, StringComparison.Ordinal))
+                            inputField.text = normalized;
+                    });
+                    inputField.text = NormalizeDurationForDisplay(SanitizeDuration(inputField.text));
                     break;
 
                 default:
@@ -487,26 +497,104 @@ namespace TimeLoop.Core.UI
             if (string.IsNullOrEmpty(raw))
                 return string.Empty;
 
-            var digits = new List<char>(4);
-            foreach (var c in raw)
-            {
-                if (!char.IsDigit(c))
-                    continue;
+            // Build up to 3 segments (HH, MM, SS) with max 2 digits each.
+            // Supports both manual ':' typing and seamless digit-only typing.
+            var segments = new List<string>(3) { string.Empty };
+            var current = 0;
 
-                digits.Add(c);
-                if (digits.Count >= 4)
+            for (var i = 0; i < raw.Length; i++)
+            {
+                var c = raw[i];
+                if (char.IsDigit(c))
+                {
+                    if (segments[current].Length < 2)
+                    {
+                        segments[current] += c;
+                    }
+                    else if (current < 2)
+                    {
+                        // Auto-advance to next segment so typing can continue after 2 digits.
+                        current++;
+                        segments.Add(string.Empty);
+                        segments[current] += c;
+                    }
+
+                    continue;
+                }
+
+                if (c == ':' && current < 2 && segments[current].Length > 0)
+                {
+                    // Manual segment advance.
+                    current++;
+                    if (segments.Count <= current)
+                        segments.Add(string.Empty);
+                }
+            }
+
+            // Trim trailing empty segments so we don't force extra ':' while typing.
+            for (var i = segments.Count - 1; i > 0; i--)
+            {
+                if (string.IsNullOrEmpty(segments[i]))
+                    segments.RemoveAt(i);
+                else
                     break;
             }
 
-            if (digits.Count == 0)
-                return string.Empty;
+            return string.Join(":", segments);
+        }
 
-            if (digits.Count <= 2)
-                return new string(digits.ToArray());
+        private static string NormalizeDurationForDisplay(string raw)
+        {
+            var seconds = ParseDurationFromText(raw);
+            return FormatDurationHhMmSs(seconds);
+        }
 
-            var minutePart = new string(digits.GetRange(0, 2).ToArray());
-            var secondPart = new string(digits.GetRange(2, digits.Count - 2).ToArray());
-            return $"{minutePart}:{secondPart}";
+        private static int ParseDurationFromText(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return 0;
+
+            const int maxSeconds = 359999; // 99:59:59
+            var parts = raw.Split(':');
+
+            if (parts.Length == 3)
+            {
+                var hh = 0;
+                var mm = 0;
+                var ss = 0;
+                int.TryParse(parts[0], out hh);
+                int.TryParse(parts[1], out mm);
+                int.TryParse(parts[2], out ss);
+                hh = Mathf.Clamp(hh, 0, 99);
+                mm = Mathf.Clamp(mm, 0, 59);
+                ss = Mathf.Clamp(ss, 0, 59);
+                return Mathf.Clamp((hh * 3600) + (mm * 60) + ss, 0, maxSeconds);
+            }
+
+            if (parts.Length == 2)
+            {
+                var mm = 0;
+                var ss = 0;
+                int.TryParse(parts[0], out mm);
+                int.TryParse(parts[1], out ss);
+                mm = Mathf.Clamp(mm, 0, 5999);
+                ss = Mathf.Clamp(ss, 0, 59);
+                return Mathf.Clamp((mm * 60) + ss, 0, maxSeconds);
+            }
+
+            if (int.TryParse(raw, out var rawSeconds))
+                return Mathf.Clamp(rawSeconds, 0, maxSeconds);
+
+            return 0;
+        }
+
+        private static string FormatDurationHhMmSs(int totalSeconds)
+        {
+            totalSeconds = Mathf.Clamp(totalSeconds, 0, 359999);
+            var hh = totalSeconds / 3600;
+            var mm = (totalSeconds % 3600) / 60;
+            var ss = totalSeconds % 60;
+            return $"{hh:00}:{mm:00}:{ss:00}";
         }
 
         private static void BuildProgressBar(XmlNode node, RectTransform parent, UIHandler handler)

@@ -44,6 +44,7 @@ public partial class MainMenuHtmlController
         }
 
         uiHandler.ChangeHtml(htmlAsset, true);
+        ApplyMobileSafeAreaPadding();
         LoadAndRefresh();
     }
 
@@ -57,6 +58,7 @@ public partial class MainMenuHtmlController
         }
 
         uiHandler.ChangeHtml(htmlAsset, true);
+        ApplyMobileSafeAreaPadding();
 
         ClearDynamicLoopUi();
 
@@ -99,7 +101,37 @@ public partial class MainMenuHtmlController
         _creationScrollContent = creationScrollContent != null ? creationScrollContent.GetComponent<RectTransform>() : null;
         SetCreationScrollEnabled(true);
 
+        var presetNameGo = uiHandler.GetElement("PresetNameInput");
+        var presetNameInput = presetNameGo != null ? presetNameGo.GetComponent<InputField>() : null;
+        WireInputFieldScrollRelay(presetNameInput);
+
         RebuildLoopSections();
+    }
+
+    private void ApplyMobileSafeAreaPadding()
+    {
+        if (!Application.isMobilePlatform)
+            return;
+
+        var rootGo = uiHandler.GetElement("Root");
+        if (rootGo == null)
+            return;
+
+        var rootRt = rootGo.GetComponent<RectTransform>();
+        if (rootRt == null)
+            return;
+
+        var screenWidth = Mathf.Max(1f, Screen.width);
+        var screenHeight = Mathf.Max(1f, Screen.height);
+        var safeArea = Screen.safeArea;
+
+        var anchorMin = new Vector2(safeArea.xMin / screenWidth, safeArea.yMin / screenHeight);
+        var anchorMax = new Vector2(safeArea.xMax / screenWidth, safeArea.yMax / screenHeight);
+
+        rootRt.anchorMin = anchorMin;
+        rootRt.anchorMax = anchorMax;
+        rootRt.offsetMin = Vector2.zero;
+        rootRt.offsetMax = Vector2.zero;
     }
 
     private void LoadAndRefresh()
@@ -359,7 +391,16 @@ public partial class MainMenuHtmlController
         var durationText = durationGo.GetComponent<Text>();
         durationText.font = _font;
         durationText.fontStyle = FontStyle.Normal;
-        durationText.text = FormatLongSeconds(Mathf.RoundToInt(Mathf.Max(0f, entry != null ? entry.durationSeconds : 0f)));
+        var perRepOrDuration = FormatLongSeconds(Mathf.RoundToInt(Mathf.Max(0f, entry != null ? entry.durationSeconds : 0f)));
+        if (entry != null && entry.mode == EntryMode.REPS)
+        {
+            var reps = Mathf.Clamp(entry.repCount <= 0 ? 1 : entry.repCount, 1, 999);
+            durationText.text = $"{reps}x {perRepOrDuration}";
+        }
+        else
+        {
+            durationText.text = perRepOrDuration;
+        }
         durationText.fontSize = 30;
         durationText.resizeTextForBestFit = false;
         durationText.color = new Color(1f, 1f, 1f, 0.96f);

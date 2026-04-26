@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -102,6 +103,16 @@ public static class SaveLoadManager
                     if (entry.durationSeconds < 0f)
                     {
                         entry.durationSeconds = 0f;
+                    }
+
+                    if (entry.repCount <= 0)
+                    {
+                        entry.repCount = 1;
+                    }
+
+                    if (!Enum.IsDefined(typeof(EntryMode), entry.mode))
+                    {
+                        entry.mode = EntryMode.TIME;
                     }
                 }
             }
