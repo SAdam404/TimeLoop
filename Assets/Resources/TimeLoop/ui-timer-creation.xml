@@ -3,28 +3,44 @@
 
   <panel id="Root" stretch="true" background="#101321FF">
 
-        <panel id="HeaderBar" anchor="top-center" widthPercent="1" height="170" background="#1A1A30FF">
-      <text id="CreationTitle"
-            anchor="middle-center"
-            value="Create Timer"
-            widthPercent="0.95"
-            height="120"
-            align="middle-center"
-              fontSize="64"
-            color="#E2B96FFF"/>
+        <panel id="HeaderBar" anchor="top-center" widthPercent="1" height="126" background="#1A1A30FF">
+            <button id="BackBtn"
+              anchor="middle-left"
+              x="12"
+              width="120"
+              height="92"
+              noLabel="true"
+              buttonColor="#00000000"
+              icon="TimeLoop/Icons/GoogleIcons/close"
+              iconSize="48"
+              iconColor="#FFFFFFFF"
+              textColor="#00000000"
+              event="creation.back"/>
+
+            <button id="SavePresetBtn"
+              anchor="middle-right"
+              x="-12"
+              width="120"
+              height="92"
+              noLabel="true"
+              buttonColor="#00000000"
+              icon="TimeLoop/Icons/GoogleIcons/save_clock"
+              iconSize="48"
+              iconColor="#C5CCE4FF"
+              textColor="#00000000"/>
     </panel>
 
     <scrollview id="CreationScroll"
                 stretch="true"
-          top="178"
-          bottom="126"
+          top="134"
+          bottom="8"
                 left="8"
                 right="8"
-                spacing="12">
+                spacing="40">
 
       <panel id="PresetSection"
-       height="320"
-       preferredHeight="320"
+       height="248"
+       preferredHeight="248"
              background="#1D2238FF">
         <text id="PresetSectionTitle"
               anchor="top-left"
@@ -32,7 +48,7 @@
               y="-22"
           width="420"
               height="42"
-              value="Preset Data"
+              value="Total Time"
               fontSize="68"
               align="middle-left"
               color="#F4F6FFFF"/>
@@ -54,7 +70,7 @@
               y="-72"
               width="520"
               height="64"
-              value="Timer Name"
+              value=""
               fontSize="44"
               align="middle-left"
               color="#C7D1F7FF"/>
@@ -62,7 +78,7 @@
         <inputfield id="PresetNameInput"
               anchor="top-center"
               x="0"
-                  y="-196"
+              y="-132"
               widthPercent="0.95"
                 height="96"
                     placeholder="Morning Focus"
@@ -78,14 +94,21 @@
               preferredHeight="1320"
            background="#1D2238FF">
 
+        <separator id="LoopTopSeparator"
+                   anchor="top-center"
+                   y="0"
+                   widthPercent="1"
+                   thickness="3"
+                   color="#3A4470FF"/>
+
         <text id="LoopSectionTitle"
               anchor="top-left"
               x="16"
               y="-22"
-              width="420"
+            width="560"
               height="42"
-              value="Loops"
-              fontSize="68"
+              value="Loop Time Total"
+            fontSize="58"
               align="middle-left"
               color="#F4F6FFFF"/>
 
@@ -108,8 +131,9 @@
              height="96"
              spacing="8"
              background="transparent">
-           <text id="LoopNameLabel" preferredWidth="320" preferredHeight="84" value="Loop 1" fontSize="56" align="middle-left" color="#DEE5FFFF"/>
-           <text id="RepeatLabel" preferredWidth="300" preferredHeight="84" value="Repeat" fontSize="48" align="middle-right" color="#8D98C4FF"/>
+            <text id="LoopNameLabel" flex="1" preferredHeight="84" value="" fontSize="56" align="middle-left" color="#DEE5FFFF"/>
+            <text id="RepeatLabel" flex="0" preferredWidth="196" preferredHeight="84" value="Sets" fontSize="48" align="middle-center" color="#8D98C4FF"/>
+            <text id="LoopHeaderRightSpacer" flex="1" preferredHeight="84" value="" fontSize="48" align="middle-left" color="#00000000"/>
         </row>
 
         <panel id="LoopDragHandle"
@@ -183,7 +207,7 @@
                       height="78"
                       noLabel="true"
                       buttonColor="#00000000"
-                      icon="TimeLoop/Icons/GoogleIcons/menu"
+                      icon="TimeLoop/Icons/GoogleIcons/drag_handle"
                       iconSize="56"
                       textColor="#00000000"/>
             </panel>
@@ -249,7 +273,7 @@
              spacing="12"
              background="#252C48FF">
           <button id="Entry1Color" flex="1" preferredHeight="92" noLabel="true" buttonColor="#00000000" icon="TimeLoop/Icons/GoogleIcons/color" iconSize="40" iconColor="#FFFFFFFF" textColor="#00000000"/>
-          <button id="Entry1Dup" flex="1" preferredHeight="92" noLabel="true" buttonColor="#00000000" icon="TimeLoop/Icons/GoogleIcons/copy" iconSize="34" iconColor="#F4F7FFFF" textColor="#00000000"/>
+          <button id="Entry1Dup" flex="1" preferredHeight="92" noLabel="true" buttonColor="#00000000" icon="TimeLoop/Icons/GoogleIcons/copy" iconSize="40" iconColor="#F4F7FFFF" textColor="#00000000"/>
           <button id="Entry1Delete" flex="1" preferredHeight="92" noLabel="true" buttonColor="#00000000" icon="TimeLoop/Icons/GoogleIcons/delete_forever" iconSize="40" iconColor="#FFFFFFFF" textColor="#00000000"/>
         </row>
 
@@ -291,37 +315,63 @@
 
     </scrollview>
 
-    <panel id="BottomBar" anchor="bottom-center" widthPercent="1" height="126" background="#1A1A30FF">
-      <button id="BackBtn"
-              anchor="middle-left"
-              x="20"
-              width="280"
-              height="92"
-              text="Back"
-              buttonFontSize="44"
-              icon="TimeLoop/Icons/ic_back"
-              iconSize="36"
-              iconAlign="left"
-              buttonColor="#5B647FFF"
-              textColor="#FFFFFFFF"
-              event="creation.back"/>
+        <button id="CreationBackConfirmOverlay" anchor="middle-center" stretch="true" buttonColor="#000000A6" textColor="#00000000" active="false"/>
 
-      <button id="SavePresetBtn"
-              anchor="middle-right"
-              x="-20"
-              width="340"
-              height="92"
-              text="Save"
-              buttonFontSize="40"
-              icon="TimeLoop/Icons/ic_timer"
-              iconSize="36"
-              iconAlign="left"
-              buttonColor="#3E4A74FF"
-              textColor="#C5CCE4FF"/>
-    </panel>
+        <panel id="CreationBackConfirmPanel"
+           anchor="middle-center"
+           widthPercent="0.92"
+           height="360"
+           background="#151A2CFF"
+           active="false">
+      <text id="CreationBackConfirmTitle"
+        anchor="top-center"
+        x="0"
+        y="-32"
+        widthPercent="0.9"
+        height="72"
+        value="Discard changes?"
+        fontSize="46"
+        align="middle-center"
+        color="#F4F6FFFF"/>
 
-    <!-- Transparent overlay to close color picker when clicking outside -->
-    <button id="ColorPickerOverlay" anchor="middle-center" stretch="true" buttonColor="#00000000" textColor="#00000000" active="false"/>
+      <text id="CreationBackConfirmBody"
+        anchor="top-center"
+        x="0"
+        y="-116"
+        widthPercent="0.86"
+        height="74"
+        value="Your changes are not saved yet."
+        fontSize="34"
+        align="middle-center"
+        color="#C7D1F7FF"/>
+
+      <row id="CreationBackConfirmButtons"
+           anchor="bottom-center"
+           x="0"
+           y="24"
+           widthPercent="0.92"
+           height="116"
+           spacing="16"
+           background="transparent">
+        <button id="CreationBackDiscardBtn"
+            flex="1"
+            preferredHeight="96"
+          text="Discard"
+            buttonFontSize="30"
+            buttonColor="#38405EFF"
+            textColor="#FFFFFFFF"/>
+        <button id="CreationBackSaveBtn"
+            flex="1"
+            preferredHeight="96"
+          text="Save"
+            buttonFontSize="36"
+            buttonColor="#3E4A74FF"
+            textColor="#FFFFFFFF"/>
+      </row>
+        </panel>
+
+        <!-- Transparent overlay to close color picker when clicking outside -->
+        <button id="ColorPickerOverlay" anchor="middle-center" stretch="true" buttonColor="#00000000" textColor="#00000000" active="false"/>
 
     <panel id="ColorPickerPanel" anchor="bottom-center" widthPercent="1" height="460" background="#0D0F1AFF" active="false">
       <row id="ColorPickerRow1"

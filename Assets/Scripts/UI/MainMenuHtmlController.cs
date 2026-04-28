@@ -109,6 +109,7 @@ public partial class MainMenuHtmlController : MonoBehaviour
 
     private void OnDisable()
     {
+        SetCreationBackInputEnabled(false);
         AppEvents.Unsubscribe("preset.add", OnAddPreset);
         AppEvents.Unsubscribe("preset.start", OnStartPreset);
         AppEvents.Unsubscribe("preset.delete", OnDeletePreset);
@@ -169,7 +170,7 @@ public partial class MainMenuHtmlController : MonoBehaviour
     private void ApplyLoopUiData(LoopUiRefs loopUi, int loopIndex, Loop loop)
     {
         if (loopUi.LoopNameLabel != null)
-            loopUi.LoopNameLabel.text = $"Loop {loopIndex + 1}";
+            loopUi.LoopNameLabel.text = string.Empty;
 
         if (loopUi.LoopTotalDurationLabel != null)
             loopUi.LoopTotalDurationLabel.text = GetLoopDurationText(loop);

@@ -913,7 +913,7 @@ public partial class MainMenuHtmlController
         SetAnchoredY(loopUi.AddButtonsRow, loopUi.BaseAddButtonsY - heightDelta);
 
         // Keep section height tightly wrapped to the Add Entry row to avoid dead space below it.
-        const float bottomPadding = 18f;
+        const float bottomPadding = 40f;
         var addButtonsRt = loopUi.AddButtonsRow != null ? loopUi.AddButtonsRow.GetComponent<RectTransform>() : null;
         var addButtonsHeight = addButtonsRt != null ? addButtonsRt.rect.height : 110f;
         var addButtonsCenterY = Mathf.Abs(GetAnchoredY(loopUi.AddButtonsRow));

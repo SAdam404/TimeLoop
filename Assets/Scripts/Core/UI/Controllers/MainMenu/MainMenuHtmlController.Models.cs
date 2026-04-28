@@ -193,6 +193,28 @@ public partial class MainMenuHtmlController
         private Vector2 _startPointerPos;
         private bool _isScrollDrag;
 
+        private void CancelPendingInputFocus(PointerEventData eventData)
+        {
+            if (eventData == null)
+                return;
+
+            eventData.eligibleForClick = false;
+            eventData.pointerPress = null;
+            eventData.rawPointerPress = null;
+            eventData.pointerClick = null;
+            eventData.dragging = true;
+            eventData.Use();
+
+            if (TargetInput != null)
+            {
+                TargetInput.DeactivateInputField();
+
+                var eventSystem = EventSystem.current;
+                if (eventSystem != null && eventSystem.currentSelectedGameObject == TargetInput.gameObject)
+                    eventSystem.SetSelectedGameObject(null);
+            }
+        }
+
         public void OnPointerDown(PointerEventData eventData)
         {
             _startPointerPos = eventData.position;
@@ -206,22 +228,26 @@ public partial class MainMenuHtmlController
             if (!_isScrollDrag)
                 return;
 
-            if (TargetInput != null && TargetInput.isFocused)
-                TargetInput.DeactivateInputField();
-
+            CancelPendingInputFocus(eventData);
             Owner?.OnInputFieldScrollBegin(eventData);
         }
 
         public void OnDrag(PointerEventData eventData)
         {
             if (_isScrollDrag)
+            {
+                CancelPendingInputFocus(eventData);
                 Owner?.OnInputFieldScrollMove(eventData);
+            }
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
             if (_isScrollDrag)
+            {
+                CancelPendingInputFocus(eventData);
                 Owner?.OnInputFieldScrollEnd(eventData);
+            }
 
             _isScrollDrag = false;
         }
@@ -229,7 +255,10 @@ public partial class MainMenuHtmlController
         public void OnPointerUp(PointerEventData eventData)
         {
             if (_isScrollDrag)
+            {
+                CancelPendingInputFocus(eventData);
                 Owner?.OnInputFieldScrollEnd(eventData);
+            }
 
             _isScrollDrag = false;
         }
@@ -247,6 +276,19 @@ public partial class MainMenuHtmlController
         private Vector2 _startPointerPos;
         private bool _isScrollDrag;
 
+        private static void CancelPendingClick(PointerEventData eventData)
+        {
+            if (eventData == null)
+                return;
+
+            eventData.eligibleForClick = false;
+            eventData.pointerPress = null;
+            eventData.rawPointerPress = null;
+            eventData.pointerClick = null;
+            eventData.dragging = true;
+            eventData.Use();
+        }
+
         public void OnPointerDown(PointerEventData eventData)
         {
             _startPointerPos = eventData.position;
@@ -260,19 +302,26 @@ public partial class MainMenuHtmlController
             if (!_isScrollDrag)
                 return;
 
+            CancelPendingClick(eventData);
             Owner?.OnInputFieldScrollBegin(eventData);
         }
 
         public void OnDrag(PointerEventData eventData)
         {
             if (_isScrollDrag)
+            {
+                CancelPendingClick(eventData);
                 Owner?.OnInputFieldScrollMove(eventData);
+            }
         }
 
         public void OnEndDrag(PointerEventData eventData)
         {
             if (_isScrollDrag)
+            {
+                CancelPendingClick(eventData);
                 Owner?.OnInputFieldScrollEnd(eventData);
+            }
 
             _isScrollDrag = false;
         }
@@ -280,7 +329,10 @@ public partial class MainMenuHtmlController
         public void OnPointerUp(PointerEventData eventData)
         {
             if (_isScrollDrag)
+            {
+                CancelPendingClick(eventData);
                 Owner?.OnInputFieldScrollEnd(eventData);
+            }
 
             _isScrollDrag = false;
         }

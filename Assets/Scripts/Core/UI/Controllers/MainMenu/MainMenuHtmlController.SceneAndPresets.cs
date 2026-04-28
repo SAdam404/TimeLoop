@@ -1,4 +1,5 @@
 using TimeLoop.Core.Events;
+using TimeLoop.Core.Input;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -12,6 +13,7 @@ public partial class MainMenuHtmlController
 
         if (scene.name.Equals(MainMenuSceneName))
         {
+            SetCreationBackInputEnabled(false);
             ClearTimerPlayRuntimeState();
             BuildMainMenu();
             return;
@@ -19,6 +21,7 @@ public partial class MainMenuHtmlController
 
         if (scene.name.Equals(TimerCreationSceneName))
         {
+            SetCreationBackInputEnabled(true);
             ClearTimerPlayRuntimeState();
             BuildTimerCreationMenu();
             return;
@@ -26,12 +29,22 @@ public partial class MainMenuHtmlController
 
         if (scene.name.Equals(TimerPlaySceneName))
         {
+            SetCreationBackInputEnabled(false);
             BuildTimerPlayMenu();
             return;
         }
 
+        SetCreationBackInputEnabled(false);
         ClearTimerPlayRuntimeState();
         uiHandler.ClearGeneratedUi();
+    }
+
+    private void SetCreationBackInputEnabled(bool enabled)
+    {
+        InputHandling.DeactivateInputKey("Escape", ShowCreationBackConfirm, InputEventTriggerType.Press);
+
+        if (enabled)
+            InputHandling.ActivateInputKey("Escape", ShowCreationBackConfirm, InputEventTriggerType.Press);
     }
 
     private void BuildMainMenu()
@@ -69,13 +82,15 @@ public partial class MainMenuHtmlController
         uiHandler.SetInputText("PresetNameInput", _workingPreset.name);
 
         HideColorPicker();
+        HideCreationBackConfirm();
+        WireCreationBackConfirmButtons();
 
         var backButtonObject = uiHandler.GetElement("BackBtn");
         var backButton = backButtonObject != null ? backButtonObject.GetComponent<Button>() : null;
         if (backButton != null)
         {
             backButton.onClick.RemoveAllListeners();
-            backButton.onClick.AddListener(GoBackToMainMenu);
+            backButton.onClick.AddListener(ShowCreationBackConfirm);
         }
 
         var addLoopButton = GetButton("AddLoopBtn");
@@ -498,8 +513,67 @@ public partial class MainMenuHtmlController
 
     private void OnCreationBack(AppEventArg _)
     {
-        SyncUiToWorkingData();
+        ShowCreationBackConfirm();
+    }
+
+    private void WireCreationBackConfirmButtons()
+    {
+        var overlayButton = GetButton("CreationBackConfirmOverlay");
+        if (overlayButton != null)
+        {
+            overlayButton.onClick.RemoveAllListeners();
+            overlayButton.onClick.AddListener(HideCreationBackConfirm);
+        }
+
+        var discardButton = GetButton("CreationBackDiscardBtn");
+        if (discardButton != null)
+        {
+            discardButton.onClick.RemoveAllListeners();
+            discardButton.onClick.AddListener(OnCreationDiscardPressed);
+        }
+
+        var saveButton = GetButton("CreationBackSaveBtn");
+        if (saveButton != null)
+        {
+            saveButton.onClick.RemoveAllListeners();
+            saveButton.onClick.AddListener(OnCreationSaveAndBackPressed);
+        }
+    }
+
+    private void ShowCreationBackConfirm()
+    {
+        HideColorPicker();
+
+        var overlay = uiHandler.GetElement("CreationBackConfirmOverlay");
+        if (overlay != null)
+            overlay.SetActive(true);
+
+        var panel = uiHandler.GetElement("CreationBackConfirmPanel");
+        if (panel != null)
+            panel.SetActive(true);
+    }
+
+    private void HideCreationBackConfirm()
+    {
+        var panel = uiHandler.GetElement("CreationBackConfirmPanel");
+        if (panel != null)
+            panel.SetActive(false);
+
+        var overlay = uiHandler.GetElement("CreationBackConfirmOverlay");
+        if (overlay != null)
+            overlay.SetActive(false);
+    }
+
+    private void OnCreationDiscardPressed()
+    {
+        HideCreationBackConfirm();
         GoBackToMainMenu();
+    }
+
+    private void OnCreationSaveAndBackPressed()
+    {
+        HideCreationBackConfirm();
+        OnSavePresetPressed();
     }
 
     private void GoBackToMainMenu()
